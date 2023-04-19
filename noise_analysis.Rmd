@@ -23,6 +23,7 @@ library(MuMIn) # to get R squared of lmer
 library(emmeans) # for pairwise comparisons
 library(viridis) # to use viridis color palette
 library(ggExtra) # for removeGrid
+library(ggprism) # add minor tick marks to ggplot
 ```
 
 ```{r import, include = FALSE}
@@ -568,8 +569,8 @@ season <- ggplot() +
                      labels = c("Urban", "Rural")) +
   scale_fill_manual("Category", values = c("#D95F02", "#1B9E77"),
                      labels = c("Urban", "Rural")) +
-  scale_x_discrete(labels=c("1" = "1 \nAug 3-\nAug 20", "2" = "2 \nAug 31-\nSept 21",
-                              "3" = "3 \nSept 22-\nOct 8", "4" = "4 \nOct 12-\nOct 23")) +
+  scale_x_discrete(labels=c("1" = "Aug 3-\nAug 20\n1", "2" = "Aug 31-\nSept 21\n2",
+                              "3" = "Sept 22-\nOct 8\n3", "4" = "Oct 12-\nOct 23\n4")) +
   scale_y_continuous(limits = c(-75, -50), breaks = c(-75, -70, -65, -60, -55, -50)) +
   theme_classic() +
   theme(text = element_text(size = 10, color = "black"),
@@ -791,11 +792,12 @@ raw_hourly2 <- houravg %>%
                      labels = c("Urban", "Rural")) +
   scale_fill_manual("Category", values = c("#D95F02", "#1B9E77"),
                      labels = c("Urban", "Rural")) +
-  scale_x_continuous(limits = c(0, 23.5), breaks = c(0, 5, 7, 8, 9, 10, 15, 19, 20, 23)) +
-  scale_y_continuous(limits = c(-75, -42), breaks = c(-75, -70, -65, -60, -55, -50, -45)) +
+  scale_x_continuous(limits = c(0, 23.5), breaks = c(0, 7, 8, 9, 15, 19, 23), minor_breaks = seq(0, 23, 1), guide = guide_prism_minor(), expand = c(0, 0)) +
+  scale_y_continuous(limits = c(-75, -42), breaks = c(-75, -70, -65, -60, -55, -50, -45), expand = c(0, 0)) +
   theme_classic() +
   theme(text = element_text(size = 10, color = "black"),
-        legend.position = "top")
+        legend.position = "top",
+        axis.text = element_text(size = 10, color = "black"))
 
 jpeg("figures/raw_hourly2.jpeg", 3.25, height = 4, units = "in", quality = 100, res = 300)
 print(raw_hourly2)

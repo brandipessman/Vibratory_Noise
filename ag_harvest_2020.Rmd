@@ -90,7 +90,7 @@ p2 <- ggplot() +
         text = element_text(size = 10), 
         axis.title = element_text(size = 10, color = "black"),
         axis.text = element_text(size = 7, color = "black"),
-        legend.text = element_text(size = 6, color = "black"),
+        legend.text = element_text(size = 8, color = "black"),
         legend.title = element_text(size = 8, color = "black"),
         legend.position = "bottom",
         panel.grid.major.x = element_line(colour = "black", linetype = "dashed", size = 0.1)) +
