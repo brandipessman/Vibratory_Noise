@@ -26,25 +26,51 @@ library(ggExtra) # for removeGrid
 library(ggprism) # add minor tick marks to ggplot
 ```
 
-```{r import, include = FALSE}
+```{r data_wrangling, eval = FALSE, include = FALSE}
 # below was the procedure to initially process the files; I have saved the resulting file, negating the need to re-run
 
-#datapath = "/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/recording_files"
-#setwd(datapath)
-#txt_files_ls = list.files(path = datapath, pattern = "*.txt")
-#txt_files_df <- lapply(txt_files_ls, function(x) 
-#    {read.table(file = x, header = TRUE, sep ="\t")})
-#combined_dfl <- do.call("rbind", lapply(txt_files_df, as.data.frame))
-#combined_dfl$Time <- strptime(combined_dfl$Time, format = "%H:%M:%S")
-#combined_dfl$Hour <-hour(combined_dfl$Time)
-#pca_results <- readRDS("/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/data/pca_results.rds") %>% 
-#  mutate(Site = site, .keep = "unused")
-#combined_dfl <- full_join(combined_dfl, pca_results, by = "Site")
-#saveRDS(combined_dfl, file = "/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/data/combined_dfl.rds")
-combined_dfl <- readRDS("/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/data/combined_dfl.rds")
+datapath = "/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/recording_files"
+setwd(datapath)
+txt_files_ls = list.files(path = datapath, pattern = "*.txt")
+txt_files_df <- lapply(txt_files_ls, function(x) 
+    {read.table(file = x, header = TRUE, sep ="\t")})
+combined_dfl <- do.call("rbind", lapply(txt_files_df, as.data.frame))
+combined_dfl$Time <- strptime(combined_dfl$Time, format = "%H:%M:%S")
+combined_dfl$Hour <-hour(combined_dfl$Time)
+pca_results <- readRDS("/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/data/pca_results.rds") %>% 
+  mutate(Site = site, .keep = "unused")
+combined_dfl <- full_join(combined_dfl, pca_results, by = "Site")
 
+# Calculate the daily average leq for each 24-hour recording at each site
+dayavgl <- combined_dfl %>% 
+  mutate(Substrate = fct_recode(factor(Substrate), "Plant" = "Plant", "Manmade" = "Artificial", "Manmade" = "Artifical")) %>% 
+  rename(Traffic_Impact = `Traffic Impact`) %>% 
+  group_by(Site, Visit, Mic, Category, Substrate, Material, Dim.1, Traffic_Impact) %>% 
+  summarize(mean_leq = mean(Leq, na.rm = TRUE), 
+            mean_aggent = mean(AggEnt, na.rm = TRUE))
+
+prephouravgcatl <- combined_dfl %>% 
+  group_by(Site, Visit, Mic, Hour, Category, Substrate, Material) %>% 
+  summarize(meanleq = mean(Leq, na.rm = TRUE))
+
+houravgcatl <- prephouravgcatl %>% 
+  mutate(dark_light = as.numeric(ifelse(Hour >= 7, Hour - 7, Hour + 17)))
+
+# get the average leq for each site
+siteavgl <- combined_dfl %>% 
+  group_by(Site, Category) %>% 
+  summarize(mean_leq = mean(Leq)) 
+
+saveRDS(dayavgl, "/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/data/dayavgl.rds")
+saveRDS(houravgcatl, "/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/data/houravgcatl.rds")
+saveRDS(siteavgl, "/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/data/siteavgl.rds")
 ```
 
+```{r import, include = FALSE}
+dayavgl <- readRDS("/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/data/dayavgl.rds")
+houravgcatl <- readRDS("/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/data/houravgcatl.rds")
+siteavgl <- readRDS("/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/data/siteavgl.rds")
+```
 # Fun with Maps 
 
 ```{r scale_bar function, echo = FALSE, warning = FALSE, message = FALSE}
@@ -142,11 +168,6 @@ map_data2 <- data.frame(read.table("/Users/bjpessman/Documents/phd_research_code
 # import site coordinates
 sites <- read.csv("/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/data/site_coordinates.csv", header = TRUE) %>% 
   mutate(Site = Sites, .keep = "unused") 
-
-# get the average leq for each site
-siteavgl <- combined_dfl %>% 
-  group_by(Site, Category) %>% 
-  summarize(mean_leq = mean(Leq)) 
 
 sites <- full_join(sites, siteavgl, by = "Site")
 sites <- sites %>% 
@@ -251,14 +272,6 @@ Does vibratory noise vary over space?
 # First I upload a file that includes the date that each recording started on.
 visit_date <- read_excel("/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/data/visit_date.xlsx") %>% 
   mutate(Date = ymd(Date))
-
-# Calculate the daily average leq for each 24-hour recording at each site
-dayavgl <- combined_dfl %>% 
-  mutate(Substrate = fct_recode(factor(Substrate), "Plant" = "Plant", "Manmade" = "Artificial", "Manmade" = "Artifical")) %>% 
-  rename(Traffic_Impact = `Traffic Impact`) %>% 
-  group_by(Site, Visit, Mic, Category, Substrate, Material, Dim.1, Traffic_Impact) %>% 
-  summarize(mean_leq = mean(Leq, na.rm = TRUE), 
-            mean_aggent = mean(AggEnt, na.rm = TRUE))
 
 # Add dates to the daily average leq file
 dayavgl <- full_join(dayavgl, visit_date, by = c("Site", "Visit"))
@@ -728,13 +741,6 @@ We used USDA data on week end percent harvest in 2020 for field crops in Nebrask
 ## 24 Hours
 
 ```{r hourly, echo = FALSE, warning = FALSE, message = FALSE}
-prephouravgcatl <- combined_dfl %>% 
-  group_by(Site, Visit, Mic, Hour, Category, Substrate, Material) %>% 
-  summarize(meanleq = mean(Leq, na.rm = TRUE))
-
-houravgcatl <- prephouravgcatl %>% 
-  mutate(dark_light = as.numeric(ifelse(Hour >= 7, Hour - 7, Hour + 17)))
-
 # normal
 houravgcatl %>% 
   ggplot(aes(x = meanleq)) +
@@ -885,10 +891,6 @@ hourly
 Here we assessed how vibratory noise levels change throughout the day. We used hours since sunrise since preliminary analysis revealed that vibratory noise is likely highest at dawn. From dawn, vibratory noise decreases through the rest of the day and night (Chisq = 1179.0765, P < 0.001, conditional R^2 = 0.655). Still, vibratory noise significantly differs by category, with urban sites being louder than rural sites (Chisq = 18.230, P < 0.001). 
 
 ```{r vibemap, echo = FALSE, warning = FALSE, message = FALSE}
-siteavg <- combined_dfl %>% 
-  group_by(Site) %>% 
-  summarize(mean_leq = mean(Leq))
-
 mic_mic2 <- read_excel("data/mic_mic2.xlsx")
 vibmap <- full_join(houravgcatl, mic_mic2, by = c("Site", "Substrate", "Mic")) %>% 
   mutate(Substrate = ifelse(Substrate == "Plant", "Plant", "Manmade")) %>% 
