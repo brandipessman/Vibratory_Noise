@@ -1,0 +1,108 @@
+---
+title: "2020 Agricultural Harvest Trends"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r libraries, include = FALSE}
+library(tidyverse) # for wrangling
+library(lubridate) # for handling dates
+```
+
+```{r import, include = FALSE}
+# imports the data frame and adds Crop - a column with either Summer or Fall depending on the time of year the harvest occurs; we narrowed the results to only include the dates of the study
+harvest <- read.csv("data/USDA_harvest_data.csv", header = TRUE) %>% 
+  mutate(Week.Ending = mdy(Week.Ending),
+         Crop = ifelse(Commodity == "WHEAT" | Commodity == "OATS", "Summer", "Fall")) %>% 
+  filter(Week.Ending > "2020-08-01",
+         Week.Ending < "2020-10-26") %>% 
+  dplyr::select(Week.Ending, Commodity, Value, Weekly.Value, Crop) %>% 
+  mutate(Commodity = fct_relevel(factor(Commodity), "OATS", "WHEAT", "BEANS", "CORN", "SORGHUM", "SOYBEANS"))
+
+# In this data frome, we calculate the average weekly harvest rate across the commodities
+avg <- harvest %>% 
+  group_by(Week.Ending) %>% 
+  summarize(Weekly.Value = mean(Weekly.Value),
+            Value = mean(Value)) %>% 
+  mutate(Commodity = "MEAN", Crop = "Mean") 
+
+# We combine the two data sets with mean as a commodity
+combined <- rbind(harvest, avg)
+levels(combined$Commodity)
+
+#saveRDS(combined, "data/harvest.rds")
+
+# let's look at major crops grown in Lancaster County, Nebraska
+harvest_Lan <- harvest %>% 
+  ungroup() %>% 
+  filter(Commodity == "SOYBEANS" | Commodity == "CORN")
+
+avg_Lan <- harvest_Lan %>% 
+  group_by(Week.Ending) %>% 
+  summarize(Weekly.Value = mean(Weekly.Value),
+            Value = mean(Value)) %>% 
+  mutate(Commodity = "MEAN", Crop = "Mean") 
+
+combined_Lan <- rbind(harvest_Lan, avg_Lan)
+levels(combined_Lan$Commodity)
+
+#saveRDS(combined_Lan, "data/harvest_Lan.rds")
+```
+
+```{r graph_NE, echo = FALSE, message = FALSE}
+
+p <- ggplot() +
+  geom_line(aes(x = Week.Ending, y = Weekly.Value, group = Commodity, color = Commodity, linetype = Commodity), data = combined, linewidth = 1, alpha = 1) +
+  scale_color_manual(values = c("#E6AB02", "#E6AB02", "#A6761D", "#A6761D", "#A6761D", "#A6761D", "black"), 
+                     labels = c("Oats, Summer", "Wheat, Summer", "Dry Beans, Fall", "Corn, Fall","Sorghum, Fall", "Soybeans, Fall", "Mean")) +
+  scale_linetype_manual(values = c("solid", "dashed", "solid", "dashed", "dotted", "twodash", "solid"), 
+                        labels = c("Oats, Summer", "Wheat, Summer", "Dry Beans, Fall", "Corn, Fall", "Sorghum, Fall", "Soybeans, Fall", "Mean")) +
+  xlab("Date (Weeks)") +
+  ylab("Percent Harvested per Week") +
+  theme_classic() +
+  theme(legend.key.size = unit(1.5, "cm"),
+        axis.title = element_text(size = 12, color = "black"),
+        axis.text = element_text(size = 12, color = "black"),
+        legend.text = element_text(size = 10, color = "black"))
+jpeg("figures/harvest.jpeg", 4, height = 4, units = "in", quality = 100, res = 300)
+print(p)
+dev.off()
+
+p
+```
+
+Presented here are the USDA data on the percent of field crops harvested at the end of each week for the state of Nebraska in 2020. During the study period, we catch the tail end of the summer crop harvest (oats and wheat). Fall harvest increases throughout September and the first half of October. Dry bean harvest peaks at the end of September, and corn harvest peaks at the beginning of October. Harvest of the remaining crops (sorghum and soybeans) peaks in mid October. 
+
+```{r graph_Lancaster, echo = FALSE, message = FALSE}
+p2 <- ggplot() +
+  geom_line(aes(x = Week.Ending, y = Weekly.Value, group = Commodity, color = Commodity, linetype = Commodity), data = combined_Lan, linewidth = 1, alpha = 1) +
+  scale_color_manual("Crop", values = c("#A6761D", "#A6761D", "black"), 
+                     labels = c("Corn", "Soybeans", "Mean")) +
+  scale_linetype_manual("Crop", values = c("dashed", "dotted", "solid"), 
+                        labels = c("Corn", "Soybeans", "Mean")) +
+  scale_x_date(date_labels = "%b %d", limits = as.Date(c("2020-08-02", "2020-10-25")), breaks = as.Date(c("2020-08-03", "2020-08-31", "2020-09-22", "2020-10-12", "2020-10-23"))) +
+  scale_y_continuous(limits = c(0, 30), breaks = c(0, 5, 10, 15, 20, 25, 30)) +
+  xlab("Date (Weeks)") +
+  ylab("Percent Harvested per Week") +
+  theme_classic() +
+  theme(legend.key.size = unit(1, "cm"),
+        text = element_text(size = 10), 
+        axis.title = element_text(size = 10, color = "black"),
+        axis.text = element_text(size = 7, color = "black"),
+        legend.text = element_text(size = 6, color = "black"),
+        legend.title = element_text(size = 8, color = "black"),
+        legend.position = "bottom",
+        panel.grid.major.x = element_line(colour = "black", linetype = "dashed", size = 0.1)) +
+  annotate(geom = "text", x = as.Date("2020-08-16"), y = 30, label = "Visit 1", color = "black", size = 3) +
+  annotate(geom = "text", x = as.Date("2020-09-11"), y = 30, label = "Visit 2", color = "black", size = 3) +
+  annotate(geom = "text", x = as.Date("2020-10-02"), y = 30, label = "Visit 3", color = "black", size = 3) +
+  annotate(geom = "text", x = as.Date("2020-10-18"), y = 30, label = "Visit 4", color = "black", size = 3)
+jpeg("figures/harvest_Lan.jpeg", width = 3.25, height = 3, units = "in", quality = 100, res = 300)
+print(p2)
+dev.off()
+
+p2
+```
+
+Based on data from the USDA (https://ipad.fas.usda.gov/rssiws/al/us_cropprod.aspx), corn and soybeans are the main crops grown in Lancaster County, Nebraska. So, for this graph, we limit the analysis to only corn and soybeans. 

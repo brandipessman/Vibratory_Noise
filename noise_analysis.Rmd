@@ -1,0 +1,973 @@
+---
+title: "Noise Analysis 20-1000 Hz"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r libraries, include = FALSE}
+library(tidyverse) # for wrangling and graphs
+library(readxl) # read an excel file 
+library(lme4) # for mixed models
+library(MASS) # for negative binomial linear regressions
+library(ggmap) # making maps
+library(ggrepel) # for repelling labels on the graph
+library(broom) # making predictions from linear models
+library(ggpubr) # using ggarrange
+library(car) # running an Anova test
+library(fitdistrplus) # to visualize qq plots for different distributions 
+library(lubridate) # to handle dates
+library(maptools) # scale bar function
+library(broom.mixed) # to run augment on an lmer model
+library(MuMIn) # to get R squared of lmer
+library(emmeans) # for pairwise comparisons
+library(viridis) # to use viridis color palette
+library(ggExtra) # for removeGrid
+```
+
+```{r import, include = FALSE}
+# below was the procedure to initially process the files; I have saved the resulting file, negating the need to re-run
+
+#datapath = "/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/recording_files"
+#setwd(datapath)
+#txt_files_ls = list.files(path = datapath, pattern = "*.txt")
+#txt_files_df <- lapply(txt_files_ls, function(x) 
+#    {read.table(file = x, header = TRUE, sep ="\t")})
+#combined_dfl <- do.call("rbind", lapply(txt_files_df, as.data.frame))
+#combined_dfl$Time <- strptime(combined_dfl$Time, format = "%H:%M:%S")
+#combined_dfl$Hour <-hour(combined_dfl$Time)
+#pca_results <- readRDS("/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/data/pca_results.rds") %>% 
+#  mutate(Site = site, .keep = "unused")
+#combined_dfl <- full_join(combined_dfl, pca_results, by = "Site")
+#saveRDS(combined_dfl, file = "/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/data/combined_dfl.rds")
+combined_dfl <- readRDS("/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/data/combined_dfl.rds")
+
+```
+
+# Fun with Maps 
+
+```{r scale_bar function, echo = FALSE, warning = FALSE, message = FALSE}
+# code from https://egallic.fr/en/scale-bar-and-north-arrow-on-a-ggplot2-map/ 
+create_scale_bar <- function(lon,lat,distance_lon,distance_lat,distance_legend, dist_units = "km"){
+    # First rectangle
+    bottom_right <- gcDestination(lon = lon, lat = lat, bearing = 90, dist = distance_lon, dist.units = dist_units, model = "WGS84")
+    
+    topLeft <- gcDestination(lon = lon, lat = lat, bearing = 0, dist = distance_lat, dist.units = dist_units, model = "WGS84")
+    rectangle <- cbind(lon=c(lon, lon, bottom_right[1,"long"], bottom_right[1,"long"], lon),
+    lat = c(lat, topLeft[1,"lat"], topLeft[1,"lat"],lat, lat))
+    rectangle <- data.frame(rectangle, stringsAsFactors = FALSE)
+    
+    # Second rectangle t right of the first rectangle
+    bottom_right2 <- gcDestination(lon = lon, lat = lat, bearing = 90, dist = distance_lon*2, dist.units = dist_units, model = "WGS84")
+    rectangle2 <- cbind(lon = c(bottom_right[1,"long"], bottom_right[1,"long"], bottom_right2[1,"long"], bottom_right2[1,"long"], bottom_right[1,"long"]),
+    lat=c(lat, topLeft[1,"lat"], topLeft[1,"lat"], lat, lat))
+    rectangle2 <- data.frame(rectangle2, stringsAsFactors = FALSE)
+    
+    # Now let's deal with the text
+    on_top <- gcDestination(lon = lon, lat = lat, bearing = 0, dist = distance_legend, dist.units = dist_units, model = "WGS84")
+    on_top2 <- on_top3 <- on_top
+    on_top2[1,"long"] <- bottom_right[1,"long"]
+    on_top3[1,"long"] <- bottom_right2[1,"long"]
+    
+    legend <- rbind(on_top, on_top2, on_top3)
+    legend <- data.frame(cbind(legend, text = c(0, distance_lon, distance_lon*2)), stringsAsFactors = FALSE, row.names = NULL)
+    return(list(rectangle = rectangle, rectangle2 = rectangle2, legend = legend))
+}
+create_orientation_arrow <- function(scale_bar, length, distance = 1, dist_units = "km"){
+    lon <- scale_bar$rectangle2[1,1]
+    lat <- scale_bar$rectangle2[1,2]
+    
+    # Bottom point of the arrow
+    beg_point <- gcDestination(lon = lon, lat = lat, bearing = 0, dist = distance, dist.units = dist_units, model = "WGS84")
+    lon <- beg_point[1,"long"]
+    lat <- beg_point[1,"lat"]
+    
+    # Let us create the endpoint
+    on_top <- gcDestination(lon = lon, lat = lat, bearing = 0, dist = length, dist.units = dist_units, model = "WGS84")
+    
+    left_arrow <- gcDestination(lon = on_top[1,"long"], lat = on_top[1,"lat"], bearing = 225, dist = length/5, dist.units = dist_units, model = "WGS84")
+    
+    right_arrow <- gcDestination(lon = on_top[1,"long"], lat = on_top[1,"lat"], bearing = 135, dist = length/5, dist.units = dist_units, model = "WGS84")
+    
+    res <- rbind(
+            cbind(x = lon, y = lat, xend = on_top[1,"long"], yend = on_top[1,"lat"]),
+            cbind(x = left_arrow[1,"long"], y = left_arrow[1,"lat"], xend = on_top[1,"long"], yend = on_top[1,"lat"]),
+            cbind(x = right_arrow[1,"long"], y = right_arrow[1,"lat"], xend = on_top[1,"long"], yend = on_top[1,"lat"]))
+    
+    res <- as.data.frame(res, stringsAsFactors = FALSE)
+    
+    # Coordinates from which "N" will be plotted
+    coords_n <- cbind(x = lon, y = (lat + on_top[1,"lat"])/2)
+    
+    return(list(res = res, coords_n = coords_n))
+}
+scale_bar <- function(lon, lat, distance_lon, distance_lat, distance_legend, dist_unit = "km", rec_fill = "white", rec_colour = "black", rec2_fill = "black", rec2_colour = "black", legend_colour = "black", legend_size = 2, orientation = TRUE, arrow_length = 500, arrow_distance = 300, arrow_north_size = 6){
+    the_scale_bar <- create_scale_bar(lon = lon, lat = lat, distance_lon = distance_lon, distance_lat = distance_lat, distance_legend = distance_legend, dist_unit = dist_unit)
+    # First rectangle
+    rectangle1 <- geom_polygon(data = the_scale_bar$rectangle, aes(x = lon, y = lat), fill = rec_fill, colour = rec_colour)
+    
+    # Second rectangle
+    rectangle2 <- geom_polygon(data = the_scale_bar$rectangle2, aes(x = lon, y = lat), fill = rec2_fill, colour = rec2_colour)
+    
+    # Legend
+    scale_bar_legend <- annotate("text", label = paste(the_scale_bar$legend[,"text"], dist_unit, sep=""), x = the_scale_bar$legend[,"long"], y = the_scale_bar$legend[,"lat"], size = legend_size, colour = legend_colour)
+    
+    res <- list(rectangle1, rectangle2, scale_bar_legend)
+    
+    if(orientation){# Add an arrow pointing North
+        coords_arrow <- create_orientation_arrow(scale_bar = the_scale_bar, length = arrow_length, distance = arrow_distance, dist_unit = dist_unit)
+        arrow <- list(geom_segment(data = coords_arrow$res, aes(x = x, y = y, xend = xend, yend = yend)), annotate("text", label = "N", x = coords_arrow$coords_n[1,"x"], y = coords_arrow$coords_n[1,"y"], size = arrow_north_size, colour = "black"))
+        res <- c(res, arrow)
+    }
+    return(res)
+}
+```
+
+```{r site_map, echo = FALSE, warning = FALSE, message = FALSE}
+# grabs the coordinates of Lincoln's city limits
+map_data <- data.frame(read.table("/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/data/lincoln_coordinates.txt", sep = "," , header = F)) %>% 
+  slice(10:2350) %>% 
+  separate(V1, c("extra", "longitude", "latitude"), " ") %>% 
+  mutate(longitude = as.numeric(longitude),
+         latitude = as.numeric(latitude))
+
+map_data2 <- data.frame(read.table("/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/data/wilderness_coordinates.txt", sep = "," , header = F)) %>% 
+  pivot_longer(V1:V211, names_to = "extra", values_to = "V1") %>% 
+  slice(10:2350) %>% 
+  separate(V1, c("extra2", "longitude", "latitude"), " ") %>% 
+  mutate(longitude = as.numeric(longitude),
+         latitude = as.numeric(latitude))
+
+# import site coordinates
+sites <- read.csv("/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/data/site_coordinates.csv", header = TRUE) %>% 
+  mutate(Site = Sites, .keep = "unused") 
+
+# get the average leq for each site
+siteavgl <- combined_dfl %>% 
+  group_by(Site, Category) %>% 
+  summarize(mean_leq = mean(Leq)) 
+
+sites <- full_join(sites, siteavgl, by = "Site")
+sites <- sites %>% 
+  mutate(mean_leq = round(mean_leq)) %>% 
+  mutate(choice = ifelse(Site == "8A" | Site == "8B", "Urban", 
+                         ifelse(Site == "5A" | Site == "6C", "Rural", "Other")),
+         choice = factor(choice),
+         choice = fct_relevel(choice, "Urban", "Rural", "Other"))
+
+levels(sites$Category)
+
+# get maps 
+states <- map_data("state")
+nebraska <- subset(states, region == "nebraska")
+counties <- map_data("county")
+ne_county <- subset(counties, region == "nebraska")
+lancaster <- subset(ne_county, subregion == "lancaster")
+
+# adjust main map view
+height <- max(lancaster$lat) - min(lancaster$lat)
+width <- max(lancaster$long) - min(lancaster$long)
+lc_borders <- c(bottom  = min(lancaster$lat) + 0.05, 
+                 top     = max(lancaster$lat)  - 0.13,
+                 left    = min(lancaster$long) - 0.01,
+                 right   = max(lancaster$long) - 0.05)
+map <- get_stamenmap(lc_borders, zoom = 10, maptype = "toner")
+
+# final plot
+site_map <- ggmap(map) + 
+  geom_polygon(data = map_data, aes(x = longitude, y = latitude), fill = "slategray", alpha = 0.25, color = "gray30") +
+  geom_polygon(data = map_data2, aes(x = longitude, y = latitude), fill = "#7570b3", color = "gray30") +
+  geom_point(data = sites, mapping = aes(x = Longitude, y = Latitude, group = Category, color = Category), pch=21, size = 1, fill = "black", stroke = 2) +
+  geom_label_repel(aes(x =Longitude, y = Latitude, label = Site, group = Category, color = Category, fill = choice), min.segment.length = 0.1, max.overlaps = Inf, size = 3, data = sites, show.legend  = FALSE) +
+  scale_color_manual("Category", values = c("#D95F02", "#1B9E77")) + 
+  scale_fill_manual("Category", values = c("#febd8c", "#90ecd1", "white")) +
+  ylab("Latitude") + xlab("Longitude") +
+  labs(fill = "Avg. Leq (dB)") +
+  theme_classic() + 
+  theme(panel.border = element_rect(colour = "black", fill = NA, linewidth = 1)) +
+  theme(legend.position = c(0.75, 0.05),
+        legend.direction = "horizontal",
+        legend.background = element_rect(fill="grey95",
+                                  size=0.5, linetype="solid", 
+                                  colour ="black"),
+        text = element_text(size = 10, color = "black"),
+        axis.text = element_text(size = 10, color = "black"),
+        legend.text = element_text(size = 8, color = "black"),
+        legend.title = element_text(size = 8, color = "black")) +
+  scale_bar(lon = -96.9, lat = 40.58, 
+              distance_lon = 5, distance_lat = 1, distance_legend = 3, 
+              dist_unit = "km", orientation = FALSE)
+
+jpeg("figures/sites.jpeg", width = 4.5, height = 6, units = "in", quality = 100, res = 300)
+print(site_map)
+dev.off()
+
+site_map
+```
+
+Sites are randomly distributed across Lincoln, Nebraska (urban) and into the surrounding rural area (rural). 
+
+```{r leq_map, echo = FALSE, warning = FALSE, message = FALSE}
+leq_map <- ggmap(map) + 
+  theme_classic() + 
+  theme(panel.border = element_rect(colour = "black", fill=NA, size=1)) +
+  geom_polygon(data = map_data, aes(x = longitude, y = latitude), fill = "slategray", alpha = 0.25, color = "gray30") +
+  geom_point(data = sites, mapping = aes(x = Longitude, y = Latitude), pch=21, size = 1, fill = "black") +
+  #geom_density2d(data = sites, aes(x = Longitude, y = Latitude), size = 0.01, bins = 50) +
+  #stat_density2d(data = sites, aes(x = Longitude, y = Latitude, fill = ..level.., alpha = ..level..), geom = "polygon", size = 0.01, bins = 50) +
+  geom_label_repel(aes(x =Longitude, y = Latitude, fill = mean_leq, label = mean_leq), min.segment.length = 0.1, max.overlaps = Inf, size = 2, data = sites) +
+  scale_fill_viridis(name = "Leq", option = "C") + # #1B9E77, #D95F02
+  ylab("Latitude") + xlab("Longitude") +
+  labs(fill = "Avg. Leq (dB)") +
+  theme(text = element_text(size = 10, color = "black"),
+        axis.text = element_text(size = 10, color = "black")) +
+  theme(legend.position = c(0.77, 0.07),
+        legend.direction = "horizontal",
+        legend.background = element_rect(fill = "white",
+                                  size = 0.5, linetype = "solid", 
+                                  colour ="black"),
+        legend.text = element_text(size = 6),
+        legend.title = element_text(size = 6),
+        legend.key.height = unit(0.15, 'cm'),
+        legend.key.width = unit(0.4, 'cm')) +
+  scale_bar(lon = -96.9, lat = 40.58, 
+              distance_lon = 5, distance_lat = 1, distance_legend = 3, 
+              dist_unit = "km", orientation = FALSE)
+
+jpeg("figures/leq_map.jpeg", width = 4, height = 4.5, units = "in", quality = 100, res = 300)
+print(leq_map)
+dev.off()
+
+leq_map
+```
+
+Site averages vary from -55 dB to -70 dB (~15 dB difference). The sites with the highest Leq appear to occur near highly traveled roads (i.e., highways/interstates). 
+
+# Spatial Variation in Vibratory Noise
+
+Does vibratory noise vary over space?
+```{r spatial, echo = FALSE, warning = FALSE, message = FALSE}
+# First I upload a file that includes the date that each recording started on.
+visit_date <- read_excel("/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/data/visit_date.xlsx") %>% 
+  mutate(Date = ymd(Date))
+
+# Calculate the daily average leq for each 24-hour recording at each site
+dayavgl <- combined_dfl %>% 
+  mutate(Substrate = fct_recode(factor(Substrate), "Plant" = "Plant", "Manmade" = "Artificial", "Manmade" = "Artifical")) %>% 
+  rename(Traffic_Impact = `Traffic Impact`) %>% 
+  group_by(Site, Visit, Mic, Category, Substrate, Material, Dim.1, Traffic_Impact) %>% 
+  summarize(mean_leq = mean(Leq, na.rm = TRUE), 
+            mean_aggent = mean(AggEnt, na.rm = TRUE))
+
+# Add dates to the daily average leq file
+dayavgl <- full_join(dayavgl, visit_date, by = c("Site", "Visit"))
+
+# Q-Q plots for different distributions of Leq
+
+#normal 
+dayavgl %>% 
+  ggplot(aes(x = mean_leq, color = Substrate)) +
+  geom_density()
+qqp(dayavgl$mean_leq, "norm") 
+
+# lognormal
+qqp(abs(dayavgl$mean_leq), "lnorm") 
+
+# negative binomial, we need positive integers
+int_abs <- dayavgl %>% 
+  mutate(mean_leq = round(abs(mean_leq))) %>% 
+  ungroup() %>% 
+  dplyr::select(mean_leq, Dim.1, Substrate, Site)
+nbinom <- fitdistr(int_abs$mean_leq, densfun = "Negative Binomial", lower=c(1e-9, 1e-9))
+qqp(int_abs$mean_leq, "nbinom", size = nbinom$estimate[[1]], mu = nbinom$estimate[[2]]) 
+
+# poisson 
+poisson <- fitdistr(int_abs$mean_leq, "Poisson")
+qqp(int_abs$mean_leq, "pois", poisson$estimate, lambda = poisson$sd)
+
+# gamma
+gamma <- fitdistr(int_abs$mean_leq, "gamma")
+qqp(int_abs$mean_leq, "gamma", shape = gamma$estimate[[1]], rate = gamma$estimate[[2]])
+
+#dayavgl.lmer <- lmer(mean_leq ~ Dim.1 + Substrate + (1|Site), data = dayavgl)
+#car::Anova(dayavgl.lmer)
+#summary(dayavgl.lmer)
+dayavgl.lm <- lm(mean_leq ~ Dim.1 * Substrate, data = dayavgl)
+summary(dayavgl.lm)
+
+test_dayavgl <- augment(dayavgl.lm, data = dayavgl)
+resid_dayavgl <- ggplot(test_dayavgl, aes(x = .fitted, y = .resid)) + 
+  geom_point() + 
+  geom_smooth() +
+  geom_hline(yintercept = 0) +
+  xlab("Fitted Values") +
+  ylab("Standardized \nResiduals") +
+  theme_classic() +
+  theme(text = element_text(size = 14, color = "black")) +
+  theme(axis.text.x=element_text(color="black", size=14)) + 
+  theme(axis.text.y=element_text(color="black", size=14))
+
+y <- quantile(test_dayavgl$.resid, c(0.25, 0.75))
+x <- qnorm(c(0.25, 0.75))
+slope <- diff(y)/diff(x)
+int <- y[1L] - slope * x[1L]
+
+qq_dayavgl <- ggplot(test_dayavgl, aes(sample = .resid)) + 
+  stat_qq() + 
+  geom_abline(slope = slope, intercept = int) +
+  xlab("Theoretical Quantiles") +
+  ylab("Sample Quantiles") +
+  theme_classic() +
+  theme(text = element_text(size = 14, color = "black")) +
+  theme(axis.text.x=element_text(color="black", size=14)) + 
+  theme(axis.text.y=element_text(color="black", size=14))  
+
+scaleloc_dayavgl <- ggplot(test_dayavgl, aes(x = .fitted, y = sqrt(abs(.std.resid)))) + 
+  geom_point() + 
+  geom_smooth() + 
+  geom_hline(yintercept = 0.83) +
+  xlab("Fitted Values") +
+  ylab("Sqrt Standardized \nResiduals") +
+  theme_classic() +
+  theme(text = element_text(size = 14, color = "black")) +
+  theme(axis.text.x=element_text(color="black", size=14)) + 
+  theme(axis.text.y=element_text(color="black", size=14))  
+
+lev_dayavgl <- ggplot(test_dayavgl, aes(.hat, .std.resid)) +
+ geom_vline(colour = "black", xintercept = 0) +
+  geom_hline(colour = "black", yintercept = 0) +
+  geom_point(aes(size = .cooksd)) + geom_smooth(se = FALSE) +
+  xlab("Theoretical Quantiles") +
+  ylab("Sample Quantiles") +
+  labs(size = "Cook's \nDistance") +
+  theme_classic() +
+  theme(text = element_text(size = 14, color = "black")) +
+  theme(axis.text.x=element_text(color="black", size=14)) + 
+  theme(axis.text.y=element_text(color="black", size=14)) 
+
+ggarrange(resid_dayavgl, qq_dayavgl, scaleloc_dayavgl, lev_dayavgl, 
+          labels = c("A", "B", "C", "D"),
+          ncol = 2, nrow = 2)
+
+# let's look at the plot before stats
+ggplot(aes(x = Dim.1, y = mean_leq, color = Substrate), data = dayavgl) +
+  geom_point() +
+  geom_smooth(method = "lm")
+
+# let's get a data frame with just 2020 data
+dayavgl_20 <- dayavgl %>% 
+  filter(Date < "2021-01-01") %>% 
+  mutate(Date = ymd(Date)) %>% 
+  mutate(Day = as.numeric(yday(Date)),
+         Visit = factor(Visit))
+
+# let's highlight the lowest and highest points
+highlights <- dayavgl_20 %>% 
+  filter(mean_leq == max(dayavgl_20$mean_leq) | mean_leq == min(dayavgl_20$mean_leq)) %>% 
+  mutate(mean_leq = round(mean_leq, 2))
+
+nd = expand.grid(Dim.1 = seq(-3.5, 2.5, 0.05), Substrate = levels(factor(dayavgl$Substrate)))
+predictions <- augment(dayavgl.lm, newdata = nd, re.form = NA, se_fit = TRUE, type = "response")
+
+space <- ggplot() +
+  geom_point(aes(x = Dim.1, y = mean_leq, color = Substrate), data = dayavgl) +
+  geom_point(aes(x = Dim.1, y = mean_leq), color = "red", data = highlights) +
+  geom_line(aes(x = Dim.1, y = .fitted, color = Substrate), data = predictions) +
+  geom_ribbon(aes(x = Dim.1, ymax = .fitted + .se.fit, ymin = .fitted - .se.fit, fill = Substrate, color = Substrate), data = predictions, alpha = 0.5) +
+  geom_label_repel(aes(x = Dim.1, y = mean_leq, label = mean_leq), color = "red", hjust = "right", data = highlights, size = 2) +
+  xlab("Principal Component 1 (74.7%)") +
+  ylab("Daily Average Leq (20-1000 Hz)") +
+  scale_color_manual("Substrate", values = c("grey30", "#66A61E"),
+                     labels = c("Manmade", "Plant")) +
+  scale_fill_manual("Substrate", values = c("grey30", "#66A61E"),
+                     labels = c("Manmade", "Plant")) +
+  scale_y_continuous(limits = c(-75, -50), breaks = c(-75, -70, -65, -60, -55, -50)) +
+  scale_x_continuous(limits = c(-3.5, 2.5), breaks = c(-3, -2, -1, 0, 1, 2)) +
+  theme_classic() +
+  theme(text = element_text(size = 10, color = "black"),
+        axis.text = element_text(size = 10, color = "black"),
+        axis.title = element_text(size = 10, color = "black"),
+        legend.text = element_text(size = 8, color = "black"),
+        legend.position = "top",
+        legend.title = element_text(size = 8),
+        panel.grid.major.y = element_line(colour = "black", linetype = "dashed", size = 0.1))
+
+jpeg("figures/spatial.jpeg", 2.5, height = 4.5, units = "in", quality = 100, res = 300)
+print(space)
+dev.off()
+
+space
+```
+
+Daily average Leq has a significant positive relationship with Principal Component 1 - road vibratory noise (t = 10.257, df = 291, P < 0.001, adj.R^2 = 0.45). Daily average Leq was significantly higher on manmade material than plant material (t = -3.298, df = 291, P = 0.001). There is no interaction (t = -0.064, p = 0.949)
+
+Let's take a closer look at the substrate.
+Manmade structures - Paneling, Metal, Concrete, Brick, Wood
+Plant structures - Herb, Tree, Shrub, Vine
+
+```{r substrate, echo = FALSE, warning = FALSE, message = FALSE}
+dayavgl <- dayavgl %>% 
+  mutate(Type = ifelse(Material == "Bromus inermis" | 
+                         Material == "Convallaria majalis" | 
+                         Material == "Hosta" | 
+                         Material == "Polygonatum biflorum" | 
+                         Material == "Hosta plantaginea" | 
+                         Material == "Hosta sieboldii" | 
+                         Material == "Paeonia lactiflora" | 
+                         Material == "???", 
+                       "Herb",
+                       ifelse(Material == "Juniperus virginiana" | 
+                                Material == "Picea pungens", 
+                              "Tree",
+                       ifelse(Material == "Spirea cantoniensis" |
+                                Material == "Taxus cuspidata" | 
+                                Material == "Berberis thunbergii" | 
+                                Material == "Rubus allegheniensis" | 
+                                Material == "Syringa vulgaris" | 
+                                Material == "Viburnum lantana" | 
+                                Material == "Spiraea japonica" | 
+                                Material == "Taxus canadensis", 
+                              "Shrub",
+                        ifelse(Material == "Euonymus fortunei" | 
+                                 Material == "Parthenocissus tricuspidata" | 
+                                 Material == "Glechoma hederacea", 
+                               "Vine",
+                        ifelse(Material == "Paneling", 
+                               "Paneling", 
+                        ifelse(Material == "Cement" | 
+                                 Material == "Concrete", 
+                               "Concrete", 
+                        ifelse(Material == "Brick", 
+                               "Brick", 
+                        ifelse(Material == "Metal", 
+                               "Metal",
+                        ifelse(Material == "Wood", 
+                                "Wood", "Missed"))))))))))
+
+ggplot(aes(x = Dim.1, y = mean_leq, color = Type, group = Type), data = dayavgl) +
+  #geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  scale_color_manual(values = c("red", "orange", "green", "yellow", "pink", "darkgreen", "blue", "purple", "lightblue"),
+                     labels = c("Brick", "Concrete", "Herb", "Metal", "Paneling", "Shrub", "Tree", "Vine", "Wood")) +
+  xlab("Principal Component 1 (74.7%)") +
+  ylab("Average Daily Leq (20-1000 Hz)") +
+  theme_classic() +
+  theme(text = element_text(size = 10, color = "Black"))
+```
+
+Brick, paneling, and shrubs carried the highest amplitude vibrations Bricks and herbs have the steepest slopes, which might suggest these substrates are affected by vibratory noise. Wood in quiet areas have high vibrations, probably as a result of people and pets walking on porches. 
+
+# Temporal Variation in Vibratory Noise
+
+## Season
+
+```{r season, echo = FALSE, warning = FALSE, message = FALSE}
+# let's first check out the raw data
+ggplot(aes(x = Date, y = mean_leq, color = Category), data = dayavgl_20) +
+  geom_point() +
+  geom_smooth(method = "lm")
+
+# what does the rural data look like by site?
+dayavgl_20_rural <- dayavgl_20 %>% 
+  filter(Category == "Rural")
+ggplot(aes(x = Date, y = mean_leq, color = Site), data = dayavgl_20_rural) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE)
+
+#season.lm <- lm(mean_leq ~ Visit * Category, data = dayavgl_20)
+#car::Anova(season.lm)
+#summary(season.lm)
+season.lmer <- lmer(mean_leq ~ Visit * Category + (1|Site), data = dayavgl_20)
+car::Anova(season.lmer)
+summary(season.lmer)
+emmeans(season.lmer, list(pairwise ~ Visit), adjust = "tukey")
+r.squaredGLMM(season.lmer)
+
+# let's take a look within category
+dayavgl_20_urban <- dayavgl_20 %>% 
+  filter(Category == "Urban")
+season.lmer.urban <- lmer(mean_leq ~ Visit + (1|Site), data = dayavgl_20_urban)
+car::Anova(season.lmer.urban)
+season.lmer.rural <- lmer(mean_leq ~ Visit + (1|Site), data = dayavgl_20_rural)
+car::Anova(season.lmer.rural)
+
+test_season <- augment(season.lmer, data = dayavgl_20)
+resid_season <- ggplot(test_season, aes(x = .fitted, y = .resid)) + 
+  geom_point() + 
+  geom_smooth() +
+  geom_hline(yintercept = 0) +
+  xlab("Fitted Values") +
+  ylab("Standardized \nResiduals") +
+  theme_classic() +
+  theme(text = element_text(size = 14, color = "black")) +
+  theme(axis.text.x=element_text(color="black", size=14)) + 
+  theme(axis.text.y=element_text(color="black", size=14))
+
+y <- quantile(test_season$.resid, c(0.25, 0.75))
+x <- qnorm(c(0.25, 0.75))
+slope <- diff(y)/diff(x)
+int <- y[1L] - slope * x[1L]
+
+qq_season <- ggplot(test_season, aes(sample = .resid)) + 
+  stat_qq() + 
+  geom_abline(slope = slope, intercept = int) +
+  xlab("Theoretical Quantiles") +
+  ylab("Sample Quantiles") +
+  theme_classic() +
+  theme(text = element_text(size = 14, color = "black")) +
+  theme(axis.text.x=element_text(color="black", size=14)) + 
+  theme(axis.text.y=element_text(color="black", size=14))  
+
+ggarrange(resid_season, qq_season,  
+          labels = c("A", "B"),
+          ncol = 2, nrow = 1)
+
+predictions <- expand.grid(Visit = levels(factor(dayavgl$Visit)),
+                           Category = levels(factor(dayavgl_20$Category)))
+predictions$response <- predict(season.lmer, newdata = predictions, se.fit = TRUE, re.form = NA, type = "response")
+
+myFunc <- function(mm) {
+    predict(mm, newdata = predictions, re.form = ~0, type = "response")
+}
+#bigBoot_season <- bootMer(season.lmer, myFunc, nsim = 1000)
+#saveRDS(bigBoot_season, file = "data/bigBoot_season.Rds")
+bigBoot_season <- readRDS("data/bigBoot_season.Rds")
+predSE <- t(apply(bigBoot_season$t, MARGIN = 2, FUN = sd))
+predictions$SE <- predSE[1, ]
+
+group2v3 <- data.frame(x = c(2, 3), 
+                   y = c(-51, -51))
+
+harvest_Lan <- readRDS("data/harvest_Lan.rds") 
+harvest_mean <- harvest_Lan %>% 
+  filter(Commodity == "MEAN") %>% 
+  mutate(num = seq(5, 12, 1))
+added <- data.frame(Week.Ending = c("2020-08-09", "2020-08-16", "2020-08-23", "2020-08-30"),
+                    Commodity = "MEAN",
+                    Value = 0, 
+                    Weekly.Value = 0,
+                    Crop = "Mean",
+                    num = seq(1, 4, 1)) %>% 
+  mutate(Week.Ending = ymd(Week.Ending))
+mean_harvest <- rbind(harvest_mean, added)
+mean_harvest <- mean_harvest %>% 
+  arrange(num) %>% 
+  mutate(Visit = seq(0, 3.96, 0.36))
+
+season <- ggplot() +
+  geom_point(aes(x = Visit, y = mean_leq, color = Category, group = Category), data = dayavgl_20, alpha = 0.5) +
+  geom_point(aes(x = Visit, y = mean_leq), color = "red", data = highlights) +
+  geom_point(aes(x = as.numeric(Visit) + 0.25, y = response, color = Category, group = Category), data = predictions, size = 2) +
+  geom_line(aes(x = as.numeric(Visit) + 0.25, y = response, color = Category, group = Category), data = predictions, size = 1) +
+  geom_errorbar(aes(x = as.numeric(Visit) + 0.25, ymax = response + SE, ymin = response - SE, color = Category, group = Category), data = predictions, width = 0.25, size = 1) +
+  geom_line(data = group2v3, aes(x= x, y = y, group=1), inherit.aes = F) +
+  geom_label_repel(aes(x = Visit, y = mean_leq, label = mean_leq), color = "red", hjust = "right", data = highlights, size = 2) +
+  xlab("Visit") +
+  ylab("Daily Average Leq (20-1000 Hz)") +
+  scale_color_manual("Category", values = c("#D95F02", "#1B9E77"),
+                     labels = c("Urban", "Rural")) +
+  scale_fill_manual("Category", values = c("#D95F02", "#1B9E77"),
+                     labels = c("Urban", "Rural")) +
+  scale_x_discrete(labels=c("1" = "1 \nAug 3-\nAug 20", "2" = "2 \nAug 31-\nSept 21",
+                              "3" = "3 \nSept 22-\nOct 8", "4" = "4 \nOct 12-\nOct 23")) +
+  scale_y_continuous(limits = c(-75, -50), breaks = c(-75, -70, -65, -60, -55, -50)) +
+  theme_classic() +
+  theme(text = element_text(size = 10, color = "black"),
+        axis.text = element_text(size = 10, color = "black"),
+        axis.title = element_text(size = 10, color = "black"),
+        legend.text = element_text(size = 10, color = "black"),
+        legend.position = "top",
+        panel.grid.major.y = element_line(colour = "black", linetype = "dashed", size = 0.1)) +
+   annotate("text", x = 2.5, y = -50.75, label = "*", size = 6, color = "black") 
+
+jpeg("figures/season.jpeg", width = 3.25, height = 4, units = "in", quality = 100, res = 300)
+print(season)
+dev.off()
+
+season
+```
+
+To investigate whether noise varied across the season, we used a linear mixed model with visit number and category, and their interaction with site as a random factor. There was a trend that daily average Leq varied across the 2020 season (Chisq = 7.362, df = 265, P = 0.061, Conditional R^2 = 0.753). A post hoc test suggests that visit 3 was significantly louder than visit 2 (t = -3.002, P = 0.016). Also, urban areas are louder than rural areas (Chisq = 20.494, P < 0.001). There is no interaction between visit and category (Chisq = 3.493, P = 0.322). 
+
+Let's look at date rather than visit. 
+
+```{r season_date, echo = FALSE, warning = FALSE, message = FALSE}
+#season.date.lmer <- lmer(mean_leq ~ Day + Category + (1|Site), data = dayavgl_20)
+#car::Anova(season.date.lmer)
+
+season.date.lm <- lm(mean_leq ~ Day + Category, data = dayavgl_20)
+summary(season.date.lm)
+
+nd = expand.grid(Day = seq(210, 300, 1), Category = levels(factor(dayavgl_20$Category)))
+predictions <- augment(season.date.lm, newdata = nd, re.form = NA, se_fit = TRUE, type = "response")
+
+season_date <- ggplot() +
+  geom_point(aes(x = Day, y = mean_leq, color = Category, group = Category), data = dayavgl_20, alpha = 0.5) +
+  geom_point(aes(x = Day, y = mean_leq), color = "red", data = highlights) +
+  geom_line(aes(x = Day, y = .fitted, color = Category, group = Category), data = predictions, size = 1) +
+  geom_ribbon(aes(x = Day, ymax = .fitted + .se.fit, ymin = .fitted - .se.fit, color = Category, group = Category, fill = Category), data = predictions, alpha = 0.5, size = 1) +
+  geom_label_repel(aes(x = Day, y = mean_leq, label = mean_leq), color = "red", hjust = "right", data = highlights, size = 2) +
+  xlab("Day of the Year") +
+  ylab("Daily Average Leq (20-1000 Hz)") +
+  scale_color_manual("Category", values = c("#D95F02", "#1B9E77"),
+                     labels = c("Urban", "Rural")) +
+  scale_fill_manual("Category", values = c("#D95F02", "#1B9E77"),
+                     labels = c("Urban", "Rural")) +
+  scale_y_continuous(limits = c(-75, -50), breaks = c(-75, -70, -65, -60, -55, -50)) +
+  theme_classic() +
+  theme(text = element_text(size = 10, color = "black"),
+        axis.text = element_text(size = 10, color = "black"),
+        axis.title = element_text(size = 10, color = "black"),
+        legend.text = element_text(size = 10, color = "black"),
+        legend.position = "top",
+        panel.grid.major.y = element_line(colour = "black", linetype = "dashed", size = 0.1)) 
+
+jpeg("figures/season_date.jpeg", 4, height = 4, units = "in", quality = 100, res = 300)
+print(season_date)
+dev.off()
+
+season_date
+```
+
+We see similar results, but with no difference over time (F = 1.404, df = 264, P = 0.237, Adj. R^2 = 0.398). 
+
+```{r rural_harvest, echo = FALSE, warning = FALSE, message = FALSE}
+harvest_Lan <- readRDS("data/harvest_Lan.rds")
+
+dayavgl_20_rural <- dayavgl_20 %>% 
+  filter(Category == "Rural") %>% 
+  mutate(mean_harvest = ifelse(Date < "2020-08-31", 0, 
+                               ifelse(Date < "2020-09-06", 1,
+                                      ifelse(Date < "2020-09-13", 2.5,
+                                             ifelse(Date < "2020-09-20", 6.5,
+                                                    ifelse(Date < "2020-09-27", 11.5,
+                                                           ifelse(Date < "2020-10-04", 16.5,
+                                                                  ifelse(Date < "2020-10-11", 20,
+                                                                         ifelse(Date < "2020-10-18", 17, 
+                                                                                ifelse(Date < "2020-10-25", 11.5))))))))))
+
+ggplot(aes(x = mean_harvest, y = mean_leq), data = dayavgl_20_rural) +
+  geom_point() +
+  geom_smooth(method = "lm")
+
+#harvest.lm <- lm(mean_leq ~ mean_harvest, data = dayavgl_20_rural)
+#summary(harvest.lm)
+harvest.lmer <- lmer(mean_leq ~ mean_harvest + (1 | Site), data = dayavgl_20_rural)
+summary(harvest.lmer)
+Anova(harvest.lmer)
+r.squaredGLMM(harvest.lmer)
+
+test_harvest <- augment(harvest.lmer, data = dayavgl_20_rural)
+resid_harvest <- ggplot(test_harvest, aes(x = .fitted, y = .resid)) + 
+  geom_point() + 
+  geom_smooth() +
+  geom_hline(yintercept = 0) +
+  xlab("Fitted Values") +
+  ylab("Standardized \nResiduals") +
+  theme_classic() +
+  theme(text = element_text(size = 14, color = "black")) +
+  theme(axis.text.x=element_text(color="black", size=14)) + 
+  theme(axis.text.y=element_text(color="black", size=14))
+
+y <- quantile(test_harvest$.resid, c(0.25, 0.75))
+x <- qnorm(c(0.25, 0.75))
+slope <- diff(y)/diff(x)
+int <- y[1L] - slope * x[1L]
+
+qq_harvest <- ggplot(test_harvest, aes(sample = .resid)) + 
+  stat_qq() + 
+  geom_abline(slope = slope, intercept = int) +
+  xlab("Theoretical Quantiles") +
+  ylab("Sample Quantiles") +
+  theme_classic() +
+  theme(text = element_text(size = 14, color = "black")) +
+  theme(axis.text.x=element_text(color="black", size=14)) + 
+  theme(axis.text.y=element_text(color="black", size=14))  
+
+ggarrange(resid_harvest, qq_harvest,  
+          labels = c("A", "B"),
+          ncol = 2, nrow = 1)
+
+predictions <- expand.grid(mean_harvest = seq(0, 20, 0.2))
+predictions$response <- predict(harvest.lmer, newdata = predictions, se.fit = TRUE, re.form = NA, type = "response")
+
+myFunc <- function(mm) {
+    predict(mm, newdata = predictions, re.form = ~0, type = "response")
+}
+#bigBoot_harvest <- bootMer(harvest.lmer, myFunc, nsim = 1000)
+#saveRDS(bigBoot_harvest, file = "data/bigBoot_harvest.Rds")
+bigBoot_harvest <- readRDS("data/bigBoot_harvest.Rds")
+predSE <- t(apply(bigBoot_harvest$t, MARGIN = 2, FUN = sd))
+predictions$SE <- predSE[1, ]
+
+harvest <- ggplot() +
+  geom_point(aes(x = mean_harvest, y = mean_leq), data = dayavgl_20_rural, color = "#1B9E77") +
+  geom_line(aes(x = mean_harvest, y = response), data = predictions, size = 1) +
+  geom_ribbon(aes(x = mean_harvest, ymax = response + SE, ymin = response - SE), data = predictions, color = "#1B9E77", fill = "#1B9E77", alpha = 0.5) +
+  xlab("Week End Percent of Field Crop Harvested") +
+  ylab("Daily Average Leq (20-1000 Hz)") +
+  scale_y_continuous(limits = c(-75, -55), breaks = c(-75, -70, -65, -60, -55)) +
+  theme_classic() +
+  theme(text = element_text(size = 10, color = "black"),
+        axis.text = element_text(size = 10, color = "black"),
+        axis.title = element_text(size = 10, color = "black"),
+        legend.text = element_text(size = 10, color = "black"),
+        legend.position = "none",
+        panel.grid.major.y = element_line(colour = "black", linetype = "dashed", size = 0.1)) 
+
+jpeg("figures/harvest.jpeg", 3.25, height = 3, units = "in", quality = 100, res = 300)
+print(harvest)
+dev.off()
+
+harvest
+```
+
+We used USDA data on week end percent harvest in 2020 for field crops in Nebraska. This gave details on oats, wheat, dry beans, sorghum, corn, and soybeans. We restricted this list to corn and soybeans, as these are the major crops grown and harvested in Lancaster County, Nebraska. We took the mean week end percent harvested of these two crops during the study season and compared these to the rural recorded vibratory noise levels. The week end percent harvested was positively correlated with the daily average Leq for rural sites (Chisq = 4.4975, P = 0.034, conditional R^2 = 0.381). 
+
+## 24 Hours
+
+```{r hourly, echo = FALSE, warning = FALSE, message = FALSE}
+prephouravgcatl <- combined_dfl %>% 
+  group_by(Site, Visit, Mic, Hour, Category, Substrate, Material) %>% 
+  summarize(meanleq = mean(Leq, na.rm = TRUE))
+
+houravgcatl <- prephouravgcatl %>% 
+  mutate(dark_light = as.numeric(ifelse(Hour >= 7, Hour - 7, Hour + 17)))
+
+# normal
+houravgcatl %>% 
+  ggplot(aes(x = meanleq)) +
+  geom_density()
+qqp(houravgcatl$meanleq, "norm") 
+
+houravg <- houravgcatl %>% 
+  group_by(Category, Hour) %>% 
+  summarize(mean_leq = mean(meanleq),
+            se_leq = plotrix::std.error(meanleq))
+
+dark_light_avg <- houravgcatl %>% 
+  group_by(Category, dark_light) %>% 
+  summarize(mean_leq = mean(meanleq),
+            se_leq = plotrix::std.error(meanleq))
+
+raw_hourly <- dark_light_avg %>% 
+  ggplot(aes(x = dark_light, y = mean_leq, group = Category, color = Category)) +
+  annotate("rect", xmin = 12, xmax = 23.5, ymin = -72, ymax = -58,
+           alpha = 0.5, fill = "darkgrey") +
+  geom_line() +
+  geom_ribbon(aes(ymin = mean_leq - se_leq, ymax = mean_leq + se_leq, fill = Category), alpha = 0.5) +
+  xlab("Hours Since Sunrise (7AM)") +
+  ylab("Daily Average Leq (20-1000 Hz)") +
+  scale_color_manual("Category", values = c("#D95F02", "#1B9E77"),
+                     labels = c("Urban", "Rural")) +
+  scale_fill_manual("Category", values = c("#D95F02", "#1B9E77"),
+                     labels = c("Urban", "Rural")) +
+  theme_classic() +
+  theme(text = element_text(size = 10, color = "black"),
+        legend.position = "top")
+
+jpeg("figures/raw_hourly.jpeg", 4, height = 4, units = "in", quality = 100, res = 300)
+print(raw_hourly)
+dev.off()
+
+raw_hourly
+
+raw_hourly2 <- houravg %>% 
+  ggplot(aes(x = Hour, y = mean_leq, group = Category, color = Category)) +
+  annotate("rect", xmin = 0, xmax = 7, ymin = -75, ymax = -42,
+           alpha = 0.5,fill = "darkgrey") +
+  annotate("rect", xmin = 19, xmax = 23.5, ymin = -75, ymax = -42,
+           alpha = 0.5,fill = "darkgrey") +
+  geom_vline(xintercept = 8, color = "#D95F02", linetype = "dashed", size = 0.5) +
+  geom_vline(xintercept = 15, color = "#D95F02", linetype = "dashed", size = 0.5) +
+  geom_vline(xintercept = 9, color = "#1B9E77", linetype = "dashed", size = 0.5) +
+  geom_vline(xintercept = 15.1, color = "#1B9E77", linetype = "dashed", size = 0.5) +
+  geom_point(aes(x = Hour, y = meanleq, color = Category, group = Category), data = houravgcatl, alpha = 0.1) +
+  geom_line() +
+  geom_ribbon(aes(ymin = mean_leq - se_leq, ymax = mean_leq + se_leq, fill = Category), alpha = 0.5) +
+  xlab("Hour of Day") +
+  ylab("Daily Average Leq (20-1000 Hz)") +
+  scale_color_manual("Category", values = c("#D95F02", "#1B9E77"),
+                     labels = c("Urban", "Rural")) +
+  scale_fill_manual("Category", values = c("#D95F02", "#1B9E77"),
+                     labels = c("Urban", "Rural")) +
+  scale_x_continuous(limits = c(0, 23.5), breaks = c(0, 5, 7, 8, 9, 10, 15, 19, 20, 23)) +
+  scale_y_continuous(limits = c(-75, -42), breaks = c(-75, -70, -65, -60, -55, -50, -45)) +
+  theme_classic() +
+  theme(text = element_text(size = 10, color = "black"),
+        legend.position = "top")
+
+jpeg("figures/raw_hourly2.jpeg", 3.25, height = 4, units = "in", quality = 100, res = 300)
+print(raw_hourly2)
+dev.off()
+
+raw_hourly2
+
+hourly.lmer <- lmer(meanleq ~ dark_light * Category + (1 | Site), data = houravgcatl)
+summary(hourly.lmer)
+Anova(hourly.lmer)
+r.squaredGLMM(hourly.lmer)
+
+test_hourly <- augment(hourly.lmer, data = houravgcatl)
+resid_hourly <- ggplot(test_hourly, aes(x = .fitted, y = .resid)) + 
+  geom_point() + 
+  geom_smooth() +
+  geom_hline(yintercept = 0) +
+  xlab("Fitted Values") +
+  ylab("Standardized \nResiduals") +
+  theme_classic() +
+  theme(text = element_text(size = 14, color = "black")) +
+  theme(axis.text.x=element_text(color="black", size=14)) + 
+  theme(axis.text.y=element_text(color="black", size=14))
+
+y <- quantile(test_hourly$.resid, c(0.25, 0.75))
+x <- qnorm(c(0.25, 0.75))
+slope <- diff(y)/diff(x)
+int <- y[1L] - slope * x[1L]
+
+qq_hourly <- ggplot(test_hourly, aes(sample = .resid)) + 
+  stat_qq() + 
+  geom_abline(slope = slope, intercept = int) +
+  xlab("Theoretical Quantiles") +
+  ylab("Sample Quantiles") +
+  theme_classic() +
+  theme(text = element_text(size = 14, color = "black")) +
+  theme(axis.text.x=element_text(color="black", size=14)) + 
+  theme(axis.text.y=element_text(color="black", size=14))  
+
+ggarrange(resid_hourly, qq_hourly,  
+          labels = c("A", "B"),
+          ncol = 2, nrow = 1)
+
+predictions <- expand.grid(dark_light = seq(0, 23, 0.2),
+                           Category = levels(factor(houravgcatl$Category)))
+predictions$response <- predict(hourly.lmer, newdata = predictions, se.fit = TRUE, re.form = NA, type = "response")
+
+myFunc <- function(mm) {
+    predict(mm, newdata = predictions, re.form = ~0, type = "response")
+}
+#bigBoot_hourly <- bootMer(hourly.lmer, myFunc, nsim = 1000)
+#saveRDS(bigBoot_hourly, file = "data/bigBoot_hourly.Rds")
+bigBoot_hourly <- readRDS("data/bigBoot_hourly.Rds")
+predSE <- t(apply(bigBoot_hourly$t, MARGIN = 2, FUN = sd))
+predictions$SE <- predSE[1, ]
+
+hourly <- ggplot() +
+  annotate("rect", xmin = 12, xmax = 23.5, ymin = -75, ymax = -42,
+           alpha = 0.5,fill = "darkgrey") +
+  geom_point(aes(x = dark_light, y = meanleq, color = Category, group = Category), data = houravgcatl, alpha = 0.1) +
+  geom_line(aes(x = dark_light, y = response, color = Category, group = Category), data = predictions, size = 1) +
+  geom_ribbon(aes(x = dark_light, ymax = response + SE, ymin = response - SE, color = Category, group = Category, fill = Category), data = predictions, alpha = 0.5, size = 1) +
+  xlab("Hours Since Sunrise (7AM)") +
+  ylab("Daily Average Leq (20-1000 Hz)") +
+  scale_color_manual("Category", values = c("#D95F02", "#1B9E77"),
+                     labels = c("Urban", "Rural")) +
+  scale_fill_manual("Category", values = c("#D95F02", "#1B9E77"),
+                     labels = c("Urban", "Rural")) +
+  scale_y_continuous(limits = c(-75, -42), breaks = c(-75, -70, -65, -60, -55, -50, -45)) +
+  theme_classic() +
+  theme(text = element_text(size = 10, color = "black"),
+        axis.text = element_text(size = 10, color = "black"),
+        axis.title = element_text(size = 10, color = "black"),
+        legend.text = element_text(size = 10, color = "black"),
+        legend.position = "top",
+        panel.grid.major.y = element_line(colour = "black", linetype = "dashed", size = 0.1)) 
+
+jpeg("figures/hourly.jpeg", 4, height = 4, units = "in", quality = 100, res = 300)
+print(hourly)
+dev.off()
+
+hourly
+```
+
+Here we assessed how vibratory noise levels change throughout the day. We used hours since sunrise since preliminary analysis revealed that vibratory noise is likely highest at dawn. From dawn, vibratory noise decreases through the rest of the day and night (Chisq = 1179.0765, P < 0.001, conditional R^2 = 0.655). Still, vibratory noise significantly differs by category, with urban sites being louder than rural sites (Chisq = 18.230, P < 0.001). 
+
+```{r vibemap, echo = FALSE, warning = FALSE, message = FALSE}
+siteavg <- combined_dfl %>% 
+  group_by(Site) %>% 
+  summarize(mean_leq = mean(Leq))
+
+mic_mic2 <- read_excel("data/mic_mic2.xlsx")
+vibmap <- full_join(houravgcatl, mic_mic2, by = c("Site", "Substrate", "Mic")) %>% 
+  mutate(Substrate = ifelse(Substrate == "Plant", "Plant", "Manmade")) %>% 
+  unite("Sub_Mic", c(Substrate, Mic2), sep = "_") %>% 
+  filter(! Sub_Mic == "Manmade_NA", ! Sub_Mic == "Plant_NA") %>% 
+  mutate(Site = factor(Site), 
+         Site = fct_relevel(Site, "6B", "6C", "5A", "7B", "6A", "7A", "1B", "1C", "2C", "3B", "5B", "8B", "2B", "3C", "2A", "7C", "1A", "4C", "3A", "4B", "4A", "5C", "8A"))
+  
+sites <- sites %>% 
+  mutate(holder = 1,
+         Site = factor(Site), 
+         Site = fct_relevel(Site, "6B", "6C", "5A", "7B", "6A", "7A", "1B", "1C", "2C", "3B", "5B", "8B", "2B", "3C", "2A", "7C", "1A", "4C", "3A", "4B", "4A", "5C", "8A")) 
+  
+vibe_sites <- ggplot(sites, aes(x = Site, y = holder, fill = mean_leq)) +
+  geom_tile(color = "white", size = 0.1, na.rm = TRUE) + 
+  scale_fill_viridis(name = "Site Leq", option = "C") + 
+  theme_minimal(base_size = 8) +
+  labs(x = "Site", y = "Average Leq") +
+  theme(legend.position = "none") +
+  theme(strip.background = element_rect(colour = "white")) +
+  theme(axis.ticks = element_blank()) +
+  theme(axis.text.y = element_blank()) +
+  theme(axis.text.x = element_text(size = 6, color = "black")) +
+  theme(axis.title = element_blank()) +
+  removeGrid()
+
+jpeg("figures/vibe_sites.jpeg", width = 8, height = 1, units = "in", quality = 100, res = 300)
+print(vibe_sites)
+dev.off()
+
+vibe_sites
+
+vibe <- ggplot(vibmap, aes(x = Visit, y = dark_light, fill = meanleq)) +
+  geom_tile(color = "white", size = 0.1, na.rm = TRUE) + 
+  scale_fill_viridis(name = "Hourly Leq", option = "C") + 
+  facet_grid(Sub_Mic ~ Site) +
+  scale_y_continuous(trans = "reverse", breaks = unique(vibmap$dark_light)) +
+  theme_minimal(base_size = 8) +
+  labs(x = "Visit Number (1-4)", y = "Hour Since Sunrise") +
+  theme(legend.position = "bottom") +
+  theme(plot.title = element_text(size = 14, color = "black")) +
+  theme(axis.text.y = element_text(size = 6, color = "black")) +
+  theme(strip.background = element_rect(colour = "white")) +
+  theme(plot.title = element_text(hjust = 0, color = "black")) +
+  theme(axis.ticks = element_blank()) +
+  theme(axis.text.x = element_text(size = 6, color = "black")) +
+  theme(legend.title = element_text(size = 8, color = "black")) +
+  theme(legend.text = element_text(size = 6, color = "black")) +
+  removeGrid()
+
+jpeg("figures/vibe.jpeg", width = 8, height = 8, units = "in", quality = 100, res = 300)
+print(vibe)
+dev.off()
+
+vibe
+```
+
+```{r land_cover, echo = FALSE, warning = FALSE, message = FALSE}
+land_cover <- read.csv("data/site_land_cover.csv", header = TRUE) %>% 
+  mutate(Site = factor(Site),
+         Site = fct_relevel(Site, "7B", "6B", "6C", "7A", "5A", "6A", "3B", "1A", "2C", "5C", "7C", "4A", "4C", "2B", "5B", "3C", "1B", "8B", "2A", "1C", "3A", "8A", "4B"),
+         Land_Cover = factor(Land_Cover),
+         Land_Cover = fct_relevel(Land_Cover, "Other", "Agriculture", "Urban"))
+
+land <- land_cover %>% 
+ggplot(aes(x = Site, y = Percent, fill = Land_Cover)) +
+  geom_col(position = "fill") +
+  ylab("Proportion of Land Cover Class in 1 km Radius") +
+  scale_fill_manual("Land Cover", 
+                        values = c("#666666", "#1B9E77", "#D95F02"), 
+                        labels = c("Other", "Agriculture", "Urban")) +
+  theme_classic() +
+  theme(text = element_text(size = 9, color = "black"), 
+        axis.title = element_text(size = 9), 
+        axis.text = element_text(size = 6, color = "black"),
+        legend.position = "top")
+
+jpeg("figures/land.jpeg", width = 3.25, height = 3.25, units = "in", quality = 100, res = 300)
+print(land)
+dev.off()
+
+land
+```
+

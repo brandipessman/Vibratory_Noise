@@ -1,0 +1,108 @@
+---
+title: "PCA Analysis"
+output:
+  html_document:
+    df_print: paged
+---
+```{r libraries, include = FALSE}
+library(tidyverse)
+library(FactoMineR) # to run PCA
+library(factoextra) # to make PCA plot
+library(corrplot) # build pca correlation plot
+```
+
+```{r import, include = FALSE}
+pca <- read.table("data/pca_noise.txt", header = TRUE)
+colnames(pca) <- c('Impervious','Road Distance','Traffic Distance', 'Traffic', 'Road Length', 'Traffic Impact', 'Category')
+pca <- pca %>% 
+  mutate(Category = fct_relevel(factor(Category), "Urban", "Rural"))
+pca <- pca[, c(1, 3, 4, 5, 2, 6, 7)]
+site.pca <- PCA(pca[,1:4], graph = FALSE)
+```
+
+```{r correlation_plot, echo = FALSE, message = FALSE, warning = FALSE}
+fviz_eig(site.pca, addlabels = TRUE)
+var <- get_pca_var(site.pca)
+corrplot(var$cos2, is.corr=FALSE)
+```
+
+All variables contribute to Dimension 1. Traffic impact has a larger contribution to Dimension 2 than 1. Dimension 1 explains 74.7% of the variance, and Dimension 2 explains 20.6% of the variance. 
+
+```{r pca_plot, echo = FALSE , message = FALSE, warning = FALSE}
+pca_plot <- fviz_pca_biplot(site.pca,
+                repel = TRUE,
+                fill.ind = pca$Category,
+                col.ind = pca$Category,
+                palette = c("#D95F02", "#1B9E77"),
+                labelsize = 3,
+                pointsize = 2.0,
+                pointshape = 21,
+                axes.linetype = "dotted",
+                mean.point = FALSE,
+                col.var = "grey40",
+                xlab = "Principal Component 1 (70.9%)",
+                ylab = "Principal Component 2(18.3%)",
+                title = "",
+                ggtheme = theme_classic() + 
+                  theme(text = element_text(size = 10))) +
+  xlim(-3.5, 3.5) +
+  ylim(-1.5, 2.5) +
+  theme(legend.position = "none") +
+  theme(axis.text.x = element_text(colour = "black", size = 10)) +
+  theme(axis.text.y = element_text(colour = "black", size = 10)) +
+  theme(axis.title.x = element_text(colour = "black", size = 10)) +
+  theme(axis.title.y = element_text(colour = "black", size = 10)) 
+
+jpeg("figures/pca.jpeg", width = 4, height = 4, units = "in", quality = 100, res = 300)
+print(pca_plot)
+dev.off()
+
+pca_plot
+
+pca_plot2 <- fviz_pca_biplot(site.pca,
+                repel = TRUE,
+                label ="ind",
+                fill.ind = pca$Category,
+                col.ind = pca$Category,
+                palette = c("#D95F02", "#1B9E77"),
+                labelsize = 3,
+                pointsize = 2.0,
+                pointshape = 21,
+                axes.linetype = "dotted",
+                mean.point = FALSE,
+                col.var = "grey40",
+                xlab = "Principal Component 1 (70.9%)",
+                ylab = "Principal Component 2(18.3%)",
+                title = "",
+                ggtheme = theme_classic() + 
+                  theme(text = element_text(size = 10))) +
+  xlim(-3.5, 3.5) +
+  ylim(-1.5, 2.5) +
+  theme(legend.position = "none") +
+  theme(axis.text.x = element_text(colour = "black", size = 10)) +
+  theme(axis.text.y = element_text(colour = "black", size = 10)) +
+  theme(axis.title.x = element_text(colour = "black", size = 10)) +
+  theme(axis.title.y = element_text(colour = "black", size = 10)) 
+
+jpeg("figures/pca2.jpeg", width = 4, height = 4, units = "in", quality = 100, res = 300)
+print(pca_plot2)
+dev.off()
+
+pca_plot2
+```
+
+We defined urban as sites that had more urban than agricultural land cover within a 1 km radius. Sites with more agricultural land cover are designated as rural. Urban and rural sites split well along the first dimension, but not the second. We will use dimension one in further analyses. 
+
+Let's get dimension 1 values and save it as pca_results. 
+
+```{r get_dimensions, echo = FALSE, message = FALSE, warning = FALSE}
+dims <- data.frame(site.pca$ind$coord)
+pca_fixed <- pca 
+pca_fixed$site <- rownames(pca)
+rownames(pca_fixed) <- NULL
+dims$site <- rownames(dims)
+rownames(dims) <- NULL
+pca_results <- full_join(pca_fixed, dims, by = "site")
+#saveRDS(pca_results, file = "data/pca_results.rds")
+pca_results
+```

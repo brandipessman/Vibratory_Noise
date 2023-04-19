@@ -1,0 +1,59 @@
+---
+title: "Choice Test"
+output: html_notebook
+---
+
+```{r libraries, include = FALSE}
+library(tidyverse)
+```
+
+```{r import, include = FALSE}
+choice <- read.csv("data/choice.csv", header = TRUE) %>% 
+  mutate(Origin = as.factor(Origin), 
+         Origin = fct_recode(Origin, "Urban" = "Loud", "Rural" = "Quiet"),
+         Origin = fct_relevel(Origin, "Urban", "Rural"),
+         Site = factor(Site),
+         Site = fct_relevel(Site, "6C", "5A", "8B", "8A"))
+table(choice$Site,  choice$side_w_more)
+chisq.test(choice$Site,  choice$side_w_more, correct = FALSE)
+
+choice_silk <- choice %>% 
+  pivot_longer(cols = c(loud_silk:quiet_silk), names_to = "Container", values_to = "silk_mass") %>% 
+  dplyr::select(ID, Origin, Site, Container, silk_mass) %>% 
+  mutate(Container = as.factor(Container), 
+         Container = fct_recode(Container, "Loud" = "loud_silk", "Quiet" = "quiet_silk"))
+
+choice_silk %>% 
+  ggplot(aes(x = (silk_mass))) +
+  geom_density()
+choice_silk %>% 
+  ggplot(aes(x = sqrt(silk_mass))) +
+  geom_density()
+
+shapiro.test(sqrt(choice_silk$silk_mass))
+
+model.lm <- lm(sqrt(silk_mass) ~ Container * Site, data = choice_silk)
+car::Anova(model.lm)
+summary(model.lm)
+
+choice_silk_per <- choice %>% 
+  pivot_longer(cols = c(per_loud_notunnel:per_quiet_notunnel), names_to = "Container", values_to = "per_silk_mass") %>% 
+  dplyr::select(ID, Origin, Site, Container, per_silk_mass) %>% 
+  mutate(Container = as.factor(Container), 
+         Container = fct_recode(Container, "Loud" = "per_loud_notunnel", "Quiet" = "per_quiet_notunnel"))
+
+choice_silk_per %>% 
+  ggplot(aes(x = sqrt(per_silk_mass))) +
+  geom_density()
+
+shapiro.test(sqrt(choice_silk_per$per_silk_mass))
+
+model <- aov(per_silk_mass ~ Container * Site, data = choice_silk_per)
+summary(model)
+
+choice_silk_per2 <- choice_silk_per %>% 
+  mutate(per_silk_mass = per_silk_mass / 100)
+
+model <- glmmTMB(per_silk_mass ~ Container * Site + (Site|ID), data = choice_silk_per2, family=beta_family)
+summary(model)
+```
