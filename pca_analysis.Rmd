@@ -26,9 +26,40 @@ var <- get_pca_var(site.pca)
 corrplot(var$cos2, is.corr=FALSE)
 ```
 
-All variables contribute to Dimension 1. Traffic impact has a larger contribution to Dimension 2 than 1. Dimension 1 explains 74.7% of the variance, and Dimension 2 explains 20.6% of the variance. 
+All variables contribute to Dimension 1. Traffic has a larger contribution to Dimension 2 than 1. Dimension 1 explains `r round(site.pca$eig[1,2], 1)`% of the variance, and Dimension 2 explains `r round(site.pca$eig[2,2], 1)`% of the variance. 
 
-```{r pca_plot, echo = FALSE , message = FALSE, warning = FALSE}
+We defined urban as sites that had more urban than agricultural land cover within a 1 km radius. Sites with more agricultural land cover are designated as rural.
+
+```{r land_cover, echo = FALSE, warning = FALSE, message = FALSE, results = 'hide'}
+land_cover <- read.csv("data/site_land_cover.csv", header = TRUE) %>% 
+  mutate(Site = factor(Site),
+         Site = fct_relevel(Site, "7B", "6B", "6C", "7A", "5A", "6A", "3B", "1A", "2C", "5C", "7C", "4A", "4C", "2B", "5B", "3C", "1B", "8B", "2A", "1C", "3A", "8A", "4B"),
+         Land_Cover = factor(Land_Cover),
+         Land_Cover = fct_relevel(Land_Cover, "Other", "Agriculture", "Urban"))
+
+land <- land_cover %>% 
+ggplot(aes(x = Site, y = Percent, fill = Land_Cover)) +
+  geom_col(position = "fill") +
+  ylab("Proportion of Land Cover Class in 1 km Radius") +
+  scale_fill_manual("Land Cover", 
+                        values = c("#666666", "#1B9E77", "#D95F02"), 
+                        labels = c("Other", "Agriculture", "Urban")) +
+  theme_classic() +
+  theme(text = element_text(size = 9, color = "black"), 
+        axis.title = element_text(size = 9), 
+        axis.text = element_text(size = 6, color = "black"),
+        legend.position = "top")
+
+jpeg("figures/land.jpeg", width = 3.25, height = 3.25, units = "in", quality = 100, res = 300)
+print(land)
+dev.off()
+
+land
+```
+
+Now we can form a PCA plot with sites colored by category.
+
+```{r pca_plot, echo = FALSE , message = FALSE, warning = FALSE, results = 'hide'}
 pca_plot <- fviz_pca_biplot(site.pca,
                 repel = TRUE,
                 fill.ind = pca$Category,
@@ -41,7 +72,7 @@ pca_plot <- fviz_pca_biplot(site.pca,
                 mean.point = FALSE,
                 col.var = "grey40",
                 xlab = "Principal Component 1 (70.9%)",
-                ylab = "Principal Component 2(18.3%)",
+                ylab = "Principal Component 2 (18.3%)",
                 title = "",
                 ggtheme = theme_classic() + 
                   theme(text = element_text(size = 10))) +
@@ -72,7 +103,7 @@ pca_plot2 <- fviz_pca_biplot(site.pca,
                 mean.point = FALSE,
                 col.var = "grey40",
                 xlab = "Principal Component 1 (70.9%)",
-                ylab = "Principal Component 2(18.3%)",
+                ylab = "Principal Component 2 (18.3%)",
                 title = "",
                 ggtheme = theme_classic() + 
                   theme(text = element_text(size = 10))) +
@@ -91,7 +122,7 @@ dev.off()
 pca_plot2
 ```
 
-We defined urban as sites that had more urban than agricultural land cover within a 1 km radius. Sites with more agricultural land cover are designated as rural. Urban and rural sites split well along the first dimension, but not the second. We will use dimension one in further analyses. 
+Urban and rural sites split well along the first dimension, but not the second. We will use dimension one in further analyses. 
 
 Let's get dimension 1 values and save it as pca_results. 
 

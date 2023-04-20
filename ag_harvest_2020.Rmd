@@ -20,7 +20,7 @@ harvest <- read.csv("data/USDA_harvest_data.csv", header = TRUE) %>%
   dplyr::select(Week.Ending, Commodity, Value, Weekly.Value, Crop) %>% 
   mutate(Commodity = fct_relevel(factor(Commodity), "OATS", "WHEAT", "BEANS", "CORN", "SORGHUM", "SOYBEANS"))
 
-# In this data frome, we calculate the average weekly harvest rate across the commodities
+# In this data frame, we calculate the average weekly harvest rate across the commodities
 avg <- harvest %>% 
   group_by(Week.Ending) %>% 
   summarize(Weekly.Value = mean(Weekly.Value),
@@ -50,8 +50,7 @@ levels(combined_Lan$Commodity)
 #saveRDS(combined_Lan, "data/harvest_Lan.rds")
 ```
 
-```{r graph_NE, echo = FALSE, message = FALSE}
-
+```{r graph_NE, echo = FALSE, message = FALSE, warning = FALSE, results = 'hide'}
 p <- ggplot() +
   geom_line(aes(x = Week.Ending, y = Weekly.Value, group = Commodity, color = Commodity, linetype = Commodity), data = combined, linewidth = 1, alpha = 1) +
   scale_color_manual(values = c("#E6AB02", "#E6AB02", "#A6761D", "#A6761D", "#A6761D", "#A6761D", "black"), 
@@ -74,25 +73,29 @@ p
 
 Presented here are the USDA data on the percent of field crops harvested at the end of each week for the state of Nebraska in 2020. During the study period, we catch the tail end of the summer crop harvest (oats and wheat). Fall harvest increases throughout September and the first half of October. Dry bean harvest peaks at the end of September, and corn harvest peaks at the beginning of October. Harvest of the remaining crops (sorghum and soybeans) peaks in mid October. 
 
-```{r graph_Lancaster, echo = FALSE, message = FALSE}
+```{r graph_Lancaster, echo = FALSE, message = FALSE, warning = FALSE, results = 'hide'}
 p2 <- ggplot() +
-  geom_line(aes(x = Week.Ending, y = Weekly.Value, group = Commodity, color = Commodity, linetype = Commodity), data = combined_Lan, linewidth = 1, alpha = 1) +
-  scale_color_manual("Crop", values = c("#A6761D", "#A6761D", "black"), 
+  geom_line(aes(x = Week.Ending, y = Weekly.Value, group = Commodity, color = Commodity), data = combined_Lan, linewidth = 1, alpha = 1) +
+  geom_area(aes(x = Week.Ending, y = Weekly.Value, group = Commodity, color = Commodity, fill = Commodity), data = combined_Lan, alpha = 0.5, position = 'identity') +
+  scale_color_manual("Crop", values = c("#e6ab02", "#66a61e", "black"), 
                      labels = c("Corn", "Soybeans", "Mean")) +
-  scale_linetype_manual("Crop", values = c("dashed", "dotted", "solid"), 
-                        labels = c("Corn", "Soybeans", "Mean")) +
+  scale_fill_manual("Crop", values = c("#e6ab02", "#66a61e", "black"), 
+                     labels = c("Corn", "Soybeans", "Mean")) +
   scale_x_date(date_labels = "%b %d", limits = as.Date(c("2020-08-02", "2020-10-25")), breaks = as.Date(c("2020-08-03", "2020-08-31", "2020-09-22", "2020-10-12", "2020-10-23"))) +
   scale_y_continuous(limits = c(0, 30), breaks = c(0, 5, 10, 15, 20, 25, 30)) +
   xlab("Date (Weeks)") +
   ylab("Percent Harvested per Week") +
   theme_classic() +
-  theme(legend.key.size = unit(1, "cm"),
+  theme(legend.key.size = unit(0.5, "cm"),
         text = element_text(size = 10), 
         axis.title = element_text(size = 10, color = "black"),
         axis.text = element_text(size = 7, color = "black"),
-        legend.text = element_text(size = 8, color = "black"),
-        legend.title = element_text(size = 8, color = "black"),
-        legend.position = "bottom",
+        legend.text = element_text(size = 6, color = "black"),
+        legend.title = element_text(size = 6, color = "black"),
+        legend.position = c(0.21, 0.7),
+        legend.background = element_rect(fill="grey95",
+                                  linewidth=0.5, linetype="solid", 
+                                  colour ="black"),
         panel.grid.major.x = element_line(colour = "black", linetype = "dashed", size = 0.1)) +
   annotate(geom = "text", x = as.Date("2020-08-16"), y = 30, label = "Visit 1", color = "black", size = 3) +
   annotate(geom = "text", x = as.Date("2020-09-11"), y = 30, label = "Visit 2", color = "black", size = 3) +
