@@ -61,9 +61,10 @@ p <- ggplot() +
   ylab("Percent Harvested per Week") +
   theme_classic() +
   theme(legend.key.size = unit(1.5, "cm"),
-        axis.title = element_text(size = 12, color = "black"),
-        axis.text = element_text(size = 12, color = "black"),
-        legend.text = element_text(size = 10, color = "black"))
+        text = element_text(size = 12, color = "black", family = "sans"),
+        axis.title = element_text(size = 12, color = "black", family = "sans"),
+        axis.text = element_text(size = 12, color = "black", family = "sans"),
+        legend.text = element_text(size = 10, color = "black", family = "sans"))
 jpeg("figures/harvest.jpeg", 4, height = 4, units = "in", quality = 100, res = 300)
 print(p)
 dev.off()
@@ -88,10 +89,10 @@ p2 <- ggplot() +
   theme_classic() +
   theme(legend.key.size = unit(0.5, "cm"),
         text = element_text(size = 10), 
-        axis.title = element_text(size = 10, color = "black"),
-        axis.text = element_text(size = 7, color = "black"),
-        legend.text = element_text(size = 6, color = "black"),
-        legend.title = element_text(size = 6, color = "black"),
+        axis.title = element_text(size = 10, color = "black", family = "sans"),
+        axis.text = element_text(size = 7, color = "black", family = "sans"),
+        legend.text = element_text(size = 6, color = "black", family = "sans"),
+        legend.title = element_text(size = 6, color = "black", family = "sans"),
         legend.position = c(0.21, 0.7),
         legend.background = element_rect(fill="grey95",
                                   linewidth=0.5, linetype="solid", 

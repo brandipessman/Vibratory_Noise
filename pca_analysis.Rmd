@@ -45,9 +45,9 @@ ggplot(aes(x = Site, y = Percent, fill = Land_Cover)) +
                         values = c("#666666", "#1B9E77", "#D95F02"), 
                         labels = c("Other", "Agriculture", "Urban")) +
   theme_classic() +
-  theme(text = element_text(size = 9, color = "black"), 
-        axis.title = element_text(size = 9), 
-        axis.text = element_text(size = 6, color = "black"),
+  theme(text = element_text(size = 9, color = "black", family = "sans"), 
+        axis.title = element_text(size = 9, family = "sans"), 
+        axis.text = element_text(size = 6, color = "black", family = "sans"),
         legend.position = "top")
 
 jpeg("figures/land.jpeg", width = 3.25, height = 3.25, units = "in", quality = 100, res = 300)
@@ -79,10 +79,10 @@ pca_plot <- fviz_pca_biplot(site.pca,
   xlim(-3.5, 3.5) +
   ylim(-1.5, 2.5) +
   theme(legend.position = "none") +
-  theme(axis.text.x = element_text(colour = "black", size = 10)) +
-  theme(axis.text.y = element_text(colour = "black", size = 10)) +
-  theme(axis.title.x = element_text(colour = "black", size = 10)) +
-  theme(axis.title.y = element_text(colour = "black", size = 10)) 
+  theme(axis.text.x = element_text(colour = "black", size = 10, family = "sans")) +
+  theme(axis.text.y = element_text(colour = "black", size = 10, family = "sans")) +
+  theme(axis.title.x = element_text(colour = "black", size = 10, family = "sans")) +
+  theme(axis.title.y = element_text(colour = "black", size = 10, family = "sans")) 
 
 jpeg("figures/pca.jpeg", width = 4, height = 4, units = "in", quality = 100, res = 300)
 print(pca_plot)
