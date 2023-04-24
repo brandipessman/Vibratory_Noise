@@ -26,6 +26,7 @@ library(ggExtra) # for removeGrid
 library(ggprism) # add minor tick marks to ggplot
 library(qqplotr) # qq plots
 library(kableExtra) # print stat tables
+library(flextable) # build stats table
 ```
 
 ```{r data_wrangling, eval = FALSE, include = FALSE}
@@ -219,7 +220,7 @@ site_map <- ggmap(map) +
                                   linewidth = 0.5, linetype = "solid", 
                                   colour ="black")) + # legend properties
   theme(text = element_text(size = 10, color = "black", family = "sans"),
-        axis.text = element_text(size = 10, color = "black", family = "sans"),
+        axis.text = element_text(size = 8, color = "black", family = "sans"),
         legend.text = element_text(size = 8, color = "black", family = "sans"),
         legend.title = element_text(size = 8, color = "black", family = "sans")) + # text sizes
   scale_bar(lon = -96.9, lat = 40.58, 
@@ -446,24 +447,112 @@ ggarrange(normal, log_normal, neg_binom, poisson, gamma, nrow = 3, ncol = 2, lab
 ```
 
 ```{r spatial_lmer, echo = FALSE, warning = FALSE, message = FALSE}
+# First let's look to see if there is a difference by our determined categories
+dayavgl.lmer.cat <- lmer(mean_leq ~ Category + (1|Site), data = dayavgl)
+dayavgl.lmer.cat.stats <- car::Anova(dayavgl.lmer.cat)
+dayavgl.lmer.cat.stats2 <- summary(dayavgl.lmer.cat)
+#r.squaredGLMM(dayavgl.lmer.cat)
+
+# Let's look for overall effects of PC1 and substrate
 dayavgl.lmer <- lmer(mean_leq ~ Dim.1 * Substrate + (1|Site), data = dayavgl)
 dayavgl.lmer.stats <- car::Anova(dayavgl.lmer)
 dayavgl.lmer.stats2 <- summary(dayavgl.lmer)
 #r.squaredGLMM(dayavgl.lmer)
 #dayavgl.lm <- lm(mean_leq ~ Dim.1 * Substrate, data = dayavgl)
 #summary(dayavgl.lm)
+
+# Now let's repeat this test looking only at urban data
+dayavgl_urban <- dayavgl %>% 
+  filter(Category == "Urban")
+dayavgl.lmer.u <- lmer(mean_leq ~ Dim.1 * Substrate + (1|Site), data = dayavgl_urban)
+dayavgl.lmer.u.stats <- car::Anova(dayavgl.lmer.u)
+dayavgl.lmer.u.stats2 <- summary(dayavgl.lmer.u)
+#r.squaredGLMM(dayavgl.lmer.u)
+
+# Now let's repeat this test looking only at rural data
+dayavgl_rural <- dayavgl %>% 
+  filter(Category == "Rural")
+dayavgl.lmer.r <- lmer(mean_leq ~ Dim.1 * Substrate + (1|Site), data = dayavgl_rural)
+dayavgl.lmer.r.stats <- car::Anova(dayavgl.lmer.r)
+dayavgl.lmer.r.stats2 <- summary(dayavgl.lmer.r)
+#r.squaredGLMM(dayavgl.lmer.r)
 ```
 
-We performed `r paste(dayavgl.lmer.stats2$call[1], "(", dayavgl.lmer.stats2$call[2], ", data = ", dayavgl.lmer.stats2$call[3], ")")` and found: 
+We performed `r paste(dayavgl.lmer.stats2$call[1], "(", dayavgl.lmer.stats2$call[2], ", data = ", dayavgl.lmer.stats2$call[3], ")")` overall and for category subsets and found: 
 
 ```{r spatial_table, echo = FALSE, warning = FALSE, message = FALSE}
+kable(dayavgl.lmer.cat.stats)
 kable(dayavgl.lmer.stats)
+kable(dayavgl.lmer.u.stats)
+kable(dayavgl.lmer.r.stats)
 ```
 
 Let's check the assumptions: 
 
 ```{r spatial_assumptions, echo = FALSE, warning = FALSE, message = FALSE}
 test_dayavgl <- augment(dayavgl.lmer, data = dayavgl)
+resid_dayavgl <- ggplot(test_dayavgl, aes(x = .fitted, y = .resid)) + 
+  geom_point() + 
+  geom_smooth() +
+  geom_hline(yintercept = 0) +
+  xlab("Fitted Values") +
+  ylab("Standardized \nResiduals") +
+  theme_classic() +
+  theme(text = element_text(size = 14, color = "black")) +
+  theme(axis.text.x=element_text(color="black", size=14)) + 
+  theme(axis.text.y=element_text(color="black", size=14))
+
+y <- quantile(test_dayavgl$.resid, c(0.25, 0.75))
+x <- qnorm(c(0.25, 0.75))
+slope <- diff(y)/diff(x)
+int <- y[1L] - slope * x[1L]
+
+qq_dayavgl <- ggplot(test_dayavgl, aes(sample = .resid)) + 
+  stat_qq() + 
+  geom_abline(slope = slope, intercept = int) +
+  xlab("Theoretical Quantiles") +
+  ylab("Sample Quantiles") +
+  theme_classic() +
+  theme(text = element_text(size = 14, color = "black")) +
+  theme(axis.text.x=element_text(color="black", size=14)) + 
+  theme(axis.text.y=element_text(color="black", size=14))  
+
+ggarrange(resid_dayavgl, qq_dayavgl, 
+          labels = c("A", "B"),
+          ncol = 2, nrow = 1)
+
+test_dayavgl <- augment(dayavgl.lmer.u, data = dayavgl_urban)
+resid_dayavgl <- ggplot(test_dayavgl, aes(x = .fitted, y = .resid)) + 
+  geom_point() + 
+  geom_smooth() +
+  geom_hline(yintercept = 0) +
+  xlab("Fitted Values") +
+  ylab("Standardized \nResiduals") +
+  theme_classic() +
+  theme(text = element_text(size = 14, color = "black")) +
+  theme(axis.text.x=element_text(color="black", size=14)) + 
+  theme(axis.text.y=element_text(color="black", size=14))
+
+y <- quantile(test_dayavgl$.resid, c(0.25, 0.75))
+x <- qnorm(c(0.25, 0.75))
+slope <- diff(y)/diff(x)
+int <- y[1L] - slope * x[1L]
+
+qq_dayavgl <- ggplot(test_dayavgl, aes(sample = .resid)) + 
+  stat_qq() + 
+  geom_abline(slope = slope, intercept = int) +
+  xlab("Theoretical Quantiles") +
+  ylab("Sample Quantiles") +
+  theme_classic() +
+  theme(text = element_text(size = 14, color = "black")) +
+  theme(axis.text.x=element_text(color="black", size=14)) + 
+  theme(axis.text.y=element_text(color="black", size=14))  
+
+ggarrange(resid_dayavgl, qq_dayavgl, 
+          labels = c("A", "B"),
+          ncol = 2, nrow = 1)
+
+test_dayavgl <- augment(dayavgl.lmer.r, data = dayavgl_rural)
 resid_dayavgl <- ggplot(test_dayavgl, aes(x = .fitted, y = .resid)) + 
   geom_point() + 
   geom_smooth() +
@@ -510,6 +599,20 @@ highlights <- dayavgl_20 %>%
   filter(mean_leq == max(dayavgl_20$mean_leq) | mean_leq == min(dayavgl_20$mean_leq)) %>% 
   mutate(mean_leq = round(mean_leq, 2))
 
+
+predictions2 <- expand.grid(Category = levels(factor(dayavgl$Category)))
+predictions2$response <- predict(dayavgl.lmer.cat, newdata = predictions2, se.fit = TRUE, re.form = NA, type = "response")
+
+myFunc <- function(mm) {
+    predict(mm, newdata = predictions, re.form = ~0, type = "response")
+}
+#bigBoot_space_cat <- bootMer(dayavgl.lmer.cat, myFunc, nsim = 1000)
+#saveRDS(bigBoot_space_cat, file = "data/bigBoot_space_cat.Rds")
+bigBoot_space_cat <- readRDS("data/bigBoot_space_cat.Rds")
+predSE <- t(apply(bigBoot_space_cat$t, MARGIN = 2, FUN = sd))
+predictions2$SE <- predSE[1, ]
+
+
 predictions <- expand.grid(Dim.1 = seq(-3.5, 2.5, 0.05),
                            Substrate = levels(factor(dayavgl$Substrate)))
 predictions$response <- predict(dayavgl.lmer, newdata = predictions, se.fit = TRUE, re.form = NA, type = "response")
@@ -527,6 +630,10 @@ predictions$SE <- predSE[1, ]
 #predictions <- augment(dayavgl.lm, newdata = nd, re.form = NA, se_fit = TRUE, type = "response")
 
 space <- ggplot() +
+  annotate("rect", xmin = -3.5, xmax = -1.5, ymin = -73, ymax = -57,
+           alpha = 0.25, color = "#1B9E77", fill = NA, linewidth = 1) +
+  annotate("rect", xmin = -0.5, xmax = 2.5, ymin = -69, ymax = -50,
+           alpha = 0.25, color = "#D95F02", fill = NA, linewidth = 1) +
   geom_point(aes(x = Dim.1, y = mean_leq, color = Substrate), data = dayavgl) +
   geom_point(aes(x = Dim.1, y = mean_leq), color = "red", data = highlights) +
   geom_line(aes(x = Dim.1, y = response, color = Substrate), data = predictions) +
@@ -549,14 +656,117 @@ space <- ggplot() +
         legend.title = element_text(size = 8),
         panel.grid.major.y = element_line(colour = "black", linetype = "dashed", linewidth = 0.1))
 
-jpeg("figures/spatial.jpeg", 2.5, height = 4.5, units = "in", quality = 100, res = 300)
+jpeg("figures/spatial.jpeg", width = 2.5, height = 4.5, units = "in", quality = 100, res = 300)
 print(space)
 dev.off()
 
 space
+
+predictions <- expand.grid(Dim.1 = seq(0, 2.2, 0.05),
+                           Substrate = levels(factor(dayavgl_urban$Substrate)))
+predictions$response <- predict(dayavgl.lmer.u, newdata = predictions, se.fit = TRUE, re.form = NA, type = "response")
+
+myFunc <- function(mm) {
+    predict(mm, newdata = predictions, re.form = ~0, type = "response")
+}
+#bigBoot_space_urban <- bootMer(dayavgl.lmer.u, myFunc, nsim = 1000)
+#saveRDS(bigBoot_space_urban, file = "data/bigBoot_space_urban.Rds")
+bigBoot_space_urban <- readRDS("data/bigBoot_space_urban.Rds")
+predSE <- t(apply(bigBoot_space_urban$t, MARGIN = 2, FUN = sd))
+predictions$SE <- predSE[1, ]
+
+#nd = expand.grid(Dim.1 = seq(-3.5, 2.5, 0.05), Substrate = levels(factor(dayavgl$Substrate)))
+#predictions <- augment(dayavgl.lm, newdata = nd, re.form = NA, se_fit = TRUE, type = "response")
+
+space_urban <- ggplot() +
+  geom_point(aes(x = Dim.1, y = mean_leq, color = Substrate), data = dayavgl_urban) +
+  geom_line(aes(x = Dim.1, y = response, color = Substrate), data = predictions) +
+  geom_ribbon(aes(x = Dim.1, ymax = response + SE, ymin = response - SE, fill = Substrate, color = Substrate), data = predictions, alpha = 0.5) +
+  xlab("Principal Component 1 (74.7%)") +
+  ylab("Daily Average Leq (20-1000 Hz)") +
+  scale_color_manual("Substrate", values = c("grey30", "#66A61E"),
+                     labels = c("Manmade", "Plant")) +
+  scale_fill_manual("Substrate", values = c("grey30", "#66A61E"),
+                     labels = c("Manmade", "Plant")) +
+  scale_y_continuous(limits = c(-75, -50), breaks = c(-75, -70, -65, -60, -55, -50)) +
+  scale_x_continuous(limits = c(0, 2.2), breaks = c(0, 0.5, 1, 1.5, 2)) +
+  theme_classic() +
+  theme(text = element_text(size = 10, color = "black", family = "sans"),
+        axis.text = element_text(size = 10, color = "black", family = "sans"),
+        axis.title = element_text(size = 10, color = "black", family = "sans"),
+        legend.text = element_text(size = 8, color = "black", family = "sans"),
+        legend.position = "none",
+        legend.title = element_text(size = 8),
+        panel.grid.major.y = element_line(colour = "black", linetype = "dashed", linewidth = 0.1),
+        panel.border = element_rect(color = "#D95F02", fill = NA, linewidth = 2))
+
+jpeg("figures/spatial_urban.jpeg", 3.25, height = 2.5, units = "in", quality = 100, res = 300)
+print(space_urban)
+dev.off()
+
+space_urban
+
+
+predictions <- expand.grid(Dim.1 = seq(-3.4, -2, 0.05),
+                           Substrate = levels(factor(dayavgl_rural$Substrate)))
+predictions$response <- predict(dayavgl.lmer.r, newdata = predictions, se.fit = TRUE, re.form = NA, type = "response")
+
+myFunc <- function(mm) {
+    predict(mm, newdata = predictions, re.form = ~0, type = "response")
+}
+#bigBoot_space_rural <- bootMer(dayavgl.lmer.r, myFunc, nsim = 1000)
+#saveRDS(bigBoot_space_rural, file = "data/bigBoot_space_rural.Rds")
+bigBoot_space_rural <- readRDS("data/bigBoot_space_rural.Rds")
+predSE <- t(apply(bigBoot_space_rural$t, MARGIN = 2, FUN = sd))
+predictions$SE <- predSE[1, ]
+
+#nd = expand.grid(Dim.1 = seq(-3.5, 2.5, 0.05), Substrate = levels(factor(dayavgl$Substrate)))
+#predictions <- augment(dayavgl.lm, newdata = nd, re.form = NA, se_fit = TRUE, type = "response")
+
+space_rural <- ggplot() +
+  geom_point(aes(x = Dim.1, y = mean_leq, color = Substrate), data = dayavgl_rural) +
+  geom_line(aes(x = Dim.1, y = response, color = Substrate), data = predictions) +
+  geom_ribbon(aes(x = Dim.1, ymax = response + SE, ymin = response - SE, fill = Substrate, color = Substrate), data = predictions, alpha = 0.5) +
+  xlab("Principal Component 1 (74.7%)") +
+  ylab("Daily Average Leq (20-1000 Hz)") +
+  scale_color_manual("Substrate", values = c("grey30", "#66A61E"),
+                     labels = c("Manmade", "Plant")) +
+  scale_fill_manual("Substrate", values = c("grey30", "#66A61E"),
+                     labels = c("Manmade", "Plant")) +
+  scale_y_continuous(limits = c(-75, -50), breaks = c(-75, -70, -65, -60, -55, -50)) +
+  scale_x_continuous(limits = c(-3.5, -2), breaks = c(-3.5, -3, -2.5, -2)) +
+  theme_classic() +
+  theme(text = element_text(size = 10, color = "black", family = "sans"),
+        axis.text = element_text(size = 10, color = "black", family = "sans"),
+        axis.title = element_text(size = 10, color = "black", family = "sans"),
+        legend.text = element_text(size = 8, color = "black", family = "sans"),
+        legend.position = "none",
+        legend.title = element_text(size = 8),
+        panel.grid.major.y = element_line(colour = "black", linetype = "dashed", linewidth = 0.1),
+        panel.border = element_rect(color = "#1B9E77", fill = NA, linewidth = 2))
+
+jpeg("figures/spatial_rural.jpeg", 3.25, height = 2.5, units = "in", quality = 100, res = 300)
+print(space_rural)
+dev.off()
+
+space_rural
 ```
 
-Daily average Leq has a significant positive relationship with Principal Component 1 - road vibratory noise (Chisq = `r round(dayavgl.lmer.stats[1,1], 2)`, df = `r dayavgl.lmer.stats2$devcomp$dims[3]`, `r dayavgl.lmer.stats2$devcomp$dims[1]`, P `r ifelse(round(dayavgl.lmer.stats[1,3], 4) == 0, print("< 0.001"), print(paste("=", round(dayavgl.lmer.stats[1,3], 3))))`, cond R$^2$ = `r round(r.squaredGLMM(dayavgl.lmer)[2], 2)`, marg R$^2$ = `r round(r.squaredGLMM(dayavgl.lmer)[1], 2)`). Daily average Leq was significantly higher on manmade material than plant material (Chisq = `r round(dayavgl.lmer.stats[2,1], 2)`, df = `r dayavgl.lmer.stats2$devcomp$dims[3]`, `r dayavgl.lmer.stats2$devcomp$dims[1]`, P `r ifelse(round(dayavgl.lmer.stats[2,3], 4) == 0, print("< 0.001"), print(paste("=", round(dayavgl.lmer.stats[2,3], 3))))`). There is no interaction (Chisq = `r dayavgl.lmer.stats[3,1]`, df = `r dayavgl.lmer.stats2$devcomp$dims[3]`, `r dayavgl.lmer.stats2$devcomp$dims[1]`, P `r ifelse(round(dayavgl.lmer.stats[3,3], 4) == 0, print("< 0.001"), print(paste('=', round(dayavgl.lmer.stats[3,3], 3))))`).
+*By Category*
+
+Urban sites had louder daily vibrations than rural sites (Chisq = `r round(dayavgl.lmer.cat.stats[1,1], 2)`, df = `r dayavgl.lmer.cat.stats2$devcomp$dims[3]`, `r dayavgl.lmer.cat.stats2$devcomp$dims[1]`, P `r ifelse(round(dayavgl.lmer.cat.stats[1,3], 4) == 0, print("< 0.001"), print(paste("=", round(dayavgl.lmer.cat.stats[1,3], 3))))`). 
+
+*Overall* 
+
+Daily average Leq has a significant positive relationship with Principal Component 1 - road vibratory noise (Chisq = `r round(dayavgl.lmer.stats[1,1], 2)`, df = `r dayavgl.lmer.stats2$devcomp$dims[3]`, `r dayavgl.lmer.stats2$devcomp$dims[1]`, P `r ifelse(round(dayavgl.lmer.stats[1,3], 4) == 0, print("< 0.001"), print(paste("=", round(dayavgl.lmer.stats[1,3], 3))))`, cond R$^2$ = `r round(r.squaredGLMM(dayavgl.lmer)[2], 2)`, marg R$^2$ = `r round(r.squaredGLMM(dayavgl.lmer)[1], 2)`). Daily average Leq was significantly higher on manmade material than plant material (Chisq = `r round(dayavgl.lmer.stats[2,1], 2)`, df = `r dayavgl.lmer.stats2$devcomp$dims[3]`, `r dayavgl.lmer.stats2$devcomp$dims[1]`, P `r ifelse(round(dayavgl.lmer.stats[2,3], 4) == 0, print("< 0.001"), print(paste("=", round(dayavgl.lmer.stats[2,3], 3))))`). There is no interaction (Chisq = `r round(dayavgl.lmer.stats[3,1], 2)`, df = `r dayavgl.lmer.stats2$devcomp$dims[3]`, `r dayavgl.lmer.stats2$devcomp$dims[1]`, P `r ifelse(round(dayavgl.lmer.stats[3,3], 4) == 0, print("< 0.001"), print(paste('=', round(dayavgl.lmer.stats[3,3], 3))))`).
+
+*Urban Subset*
+
+Daily average Leq has a significant positive relationship with Principal Component 1 - road vibratory noise (Chisq = `r round(dayavgl.lmer.u.stats[1,1], 2)`, df = `r dayavgl.lmer.u.stats2$devcomp$dims[3]`, `r dayavgl.lmer.u.stats2$devcomp$dims[1]`, P `r ifelse(round(dayavgl.lmer.u.stats[1,3], 4) == 0, print("< 0.001"), print(paste("=", round(dayavgl.lmer.u.stats[1,3], 3))))`, cond R$^2$ = `r round(r.squaredGLMM(dayavgl.lmer.u)[2], 2)`, marg R$^2$ = `r round(r.squaredGLMM(dayavgl.lmer.u)[1], 2)`). Daily average Leq was significantly higher on manmade material than plant material (Chisq = `r round(dayavgl.lmer.u.stats[2,1], 2)`, df = `r dayavgl.lmer.u.stats2$devcomp$dims[3]`, `r dayavgl.lmer.u.stats2$devcomp$dims[1]`, P `r ifelse(round(dayavgl.lmer.u.stats[2,3], 4) == 0, print("< 0.001"), print(paste("=", round(dayavgl.lmer.u.stats[2,3], 3))))`). There is no interaction (Chisq = `r round(dayavgl.lmer.u.stats[3,1], 2)`, df = `r dayavgl.lmer.u.stats2$devcomp$dims[3]`, `r dayavgl.lmer.u.stats2$devcomp$dims[1]`, P `r ifelse(round(dayavgl.lmer.u.stats[3,3], 4) == 0, print("< 0.001"), print(paste('=', round(dayavgl.lmer.u.stats[3,3], 3))))`).
+
+*Rural Subset*
+
+There was no sigificant correlation between daily average Leq and Principal Component 1 - road vibratory noise (Chisq = `r round(dayavgl.lmer.r.stats[1,1], 2)`, df = `r dayavgl.lmer.r.stats2$devcomp$dims[3]`, `r dayavgl.lmer.r.stats2$devcomp$dims[1]`, P `r ifelse(round(dayavgl.lmer.r.stats[1,3], 4) == 0, print("< 0.001"), print(paste("=", round(dayavgl.lmer.r.stats[1,3], 3))))`, cond R$^2$ = `r round(r.squaredGLMM(dayavgl.lmer.r)[2], 2)`, marg R$^2$ = `r round(r.squaredGLMM(dayavgl.lmer.r)[1], 2)`). There was a trend that daily average Leq was  higher on manmade material than plant material (Chisq = `r round(dayavgl.lmer.r.stats[2,1], 2)`, df = `r dayavgl.lmer.r.stats2$devcomp$dims[3]`, `r dayavgl.lmer.r.stats2$devcomp$dims[1]`, P `r ifelse(round(dayavgl.lmer.r.stats[2,3], 4) == 0, print("< 0.001"), print(paste("=", round(dayavgl.lmer.r.stats[2,3], 3))))`). There is a significant interaction between daily average Leq and Principal Component 1 (Chisq = `r round(dayavgl.lmer.r.stats[3,1], 2)`, df = `r dayavgl.lmer.r.stats2$devcomp$dims[3]`, `r dayavgl.lmer.r.stats2$devcomp$dims[1]`, P `r ifelse(round(dayavgl.lmer.r.stats[3,3], 4) == 0, print("< 0.001"), print(paste('=', round(dayavgl.lmer.r.stats[3,3], 3))))`) - vibrations on manmade substrates was louder at the lowest road vibratory noise, but did not differ from plants at higher levels. 
 
 Let's take a closer look at the substrate.
 
@@ -995,3 +1205,94 @@ raw_hourly
 ```
 
 Here we assessed how vibratory noise levels change throughout the day. We graph the calculated mean and standard error. The grey areas represent nighttime. We added vertical dashed lines where vibratory noise peaked throughout the day, coinciding with rush hours. This provides further evidence that road noise likely represents a large component of vibratory noise. We also see what would likely be significant differences by category following the findings across season. 
+
+Let's look by visit as well
+
+```{r hourly_visit_rawplot, echo = FALSE, warning = FALSE, message = FALSE, results = 'hide'}
+houravgvisit <- houravgcatl %>% 
+  group_by(Category, Hour, Visit) %>% 
+  summarize(mean_leq = mean(meanleq),
+            se_leq = plotrix::std.error(meanleq))
+
+raw_hourly_visit <- houravgvisit %>% 
+  ggplot(aes(x = Hour, y = mean_leq, group = Category, color = Category)) +
+  annotate("rect", xmin = 0, xmax = 7, ymin = -75, ymax = -42,
+           alpha = 0.5,fill = "darkgrey") +
+  annotate("rect", xmin = 19, xmax = 23.5, ymin = -75, ymax = -42,
+           alpha = 0.5,fill = "darkgrey") +
+  geom_vline(xintercept = 8, color = "#D95F02", linetype = "dashed", size = 0.5) +
+  geom_vline(xintercept = 15, color = "#D95F02", linetype = "dashed", size = 0.5) +
+  geom_vline(xintercept = 9, color = "#1B9E77", linetype = "dashed", size = 0.5) +
+  geom_vline(xintercept = 15.1, color = "#1B9E77", linetype = "dashed", size = 0.5) +
+  geom_point(aes(x = Hour, y = meanleq, color = Category, group = Category), data = houravgcatl, alpha = 0.1) +
+  geom_line() +
+  geom_ribbon(aes(ymin = mean_leq - se_leq, ymax = mean_leq + se_leq, fill = Category), alpha = 0.5) +
+  xlab("Hour of Day") +
+  ylab("Daily Average Leq (20-1000 Hz)") +
+  scale_color_manual("Category", values = c("#D95F02", "#1B9E77"),
+                     labels = c("Urban", "Rural")) +
+  scale_fill_manual("Category", values = c("#D95F02", "#1B9E77"),
+                     labels = c("Urban", "Rural")) +
+  scale_x_continuous(limits = c(0, 23.5), breaks = c(0, 7, 8, 9, 15, 19, 23), minor_breaks = seq(0, 23, 1), guide = guide_prism_minor(), expand = c(0, 0)) +
+  scale_y_continuous(limits = c(-75, -42), breaks = c(-75, -70, -65, -60, -55, -50, -45), expand = c(0, 0)) +
+  theme_classic() +
+  theme(text = element_text(size = 10, color = "black", family = "sans"),
+        legend.position = "top",
+        axis.text = element_text(size = 10, color = "black", family = "sans")) +
+  facet_wrap(~Visit, ncol = 1)
+
+jpeg("figures/raw_hourly_visit.jpeg", 3.25, height = 9, units = "in", quality = 100, res = 300)
+print(raw_hourly_visit)
+dev.off()
+
+raw_hourly_visit
+```
+
+# Stats Table
+
+```{r stats_table, echo = FALSE, warning = FALSE, message = FALSE}
+noise_stats <- read.csv(file = "data/vibratory_noise_stats.csv", header = TRUE) # for predictor stats table
+
+noise_stats <- noise_stats %>% 
+  mutate(Variable = factor(Variable),
+         Variable = fct_recode(Variable, "PC1 x Substrate" = "PC1xSubstrate",
+                               "Visit x Category" = "VisitxCategory",
+                               "Precent Weekly Harvest" = "PerWeeklyHarvest"),
+         Data = factor(Data),
+         Data = fct_recode(Data, "Daily Average" = "DailyAvg1",
+                                "Daily Average " = "DailyAvg2",
+                                "Daily Average (Urban)" = "Urban",
+                                "Daily Average (Rural)" = "Rural",
+                                "Daily Average (2020)" = "DayAvg2020",
+                                "Daily Average (2020,Rural)" = "DayAvg2020Rural"))
+
+noise_stats[noise_stats == 0] <- ""
+
+noise_stats <- noise_stats %>% 
+  mutate(Pvalue = factor(Pvalue),
+         Pvalue = fct_recode(Pvalue, "< 0.001 ***" = "0.001",
+                        "   0.489" = "0.489",
+                        "   0.566" = "0.566",
+                        "   0.887" = "0.887",
+                        "   0.063 ." = "0.063",
+                        "   0.040 *" = "0.04",
+                        "   0.061 ." = "0.061",
+                        "   0.322" = "0.322",
+                        "   0.034 *" = "0.034"))
+
+colnames(noise_stats) <- c('Noise Variation','Data','Variable', 'Chi-Squared', 'N', 'P-Value', 'Cond. R²', 'Marg. R²')
+
+flextable(noise_stats[ , 1:8]) %>% 
+  autofit() %>% 
+  merge_v(j = c('Noise Variation', 'Data', 'Cond. R²', 'Marg. R²'), part = "body") %>% 
+  bold(bold = TRUE, part = "header") %>% 
+  hline_bottom(part = "body", border = officer::fp_border(width = 2)) %>% 
+  border(j = 'Noise Variation', border.bottom = officer::fp_border(width = 2)) %>% 
+  hline(i = c("10"), part = "body", border = officer::fp_border(width = 2)) %>%   
+  hline(i = c("1", "4", "7", "13"), j = c("2":"8"), part = "body", border = officer::fp_border(width = 1, color = "grey")) %>%     
+  fontsize(size = 10, part = "all") %>% 
+  align(align = "center", part = "all") %>% 
+  valign(valign = "top", part = "all") %>% 
+  save_as_image(path = here::here("figures/noise_stats_table.png"))
+```
+
