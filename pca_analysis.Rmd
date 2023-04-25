@@ -34,7 +34,7 @@ We defined urban as sites that had more urban than agricultural land cover withi
 # sorted by pc1
 land_cover <- read.csv("data/site_land_cover.csv", header = TRUE) %>% 
   mutate(Site = factor(Site),
-         Site = fct_relevel(Site, "7A", "5A", "6B", "6C", "6A", "7B", "3B", "2C", "1A", "3C", "1B", "2A", "2B", "4C", "8B", "7C", "5B", "5C", "3A", "1C", "4A", "4B", "8A"),
+         Site = fct_relevel(Site, "7A", "5A", "6B", "6C", "6A", "7B", "3B", "2C", "1A", "3C", "1B", "2A", "2B", "4C", "8A", "7C", "5B", "5C", "3A", "1C", "4A", "4B", "8B"),
          Land_Cover = factor(Land_Cover),
          Land_Cover = fct_relevel(Land_Cover, "Other", "Agriculture", "Urban"))
 

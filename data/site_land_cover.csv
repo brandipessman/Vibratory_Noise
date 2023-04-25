@@ -62,9 +62,9 @@ Site,Land_Cover,Percent
 7C,Agriculture,0.0194
 7C,Other,4.6283
 7C,Urban,95.3523
-8A,Agriculture,0
-8A,Other,0.3428
-8A,Urban,99.6572
 8B,Agriculture,0
-8B,Other,0
-8B,Urban,100
+8B,Other,0.3428
+8B,Urban,99.6572
+8A,Agriculture,0
+8A,Other,0
+8A,Urban,100

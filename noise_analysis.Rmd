@@ -246,13 +246,13 @@ vibmap <- full_join(houravgcatl, mic_mic2, by = c("Site", "Substrate", "Mic")) %
   unite("Sub_Mic", c(Substrate, Mic2), sep = "_") %>% 
   filter(! Sub_Mic == "Manmade_NA", ! Sub_Mic == "Plant_NA") %>% 
   mutate(Site = factor(Site), 
-         Site = fct_relevel(Site, "6B", "6C", "5A", "7B", "6A", "7A", "1B", "1C", "2C", "3B", "5B", "8B", "2B", "3C", "2A", "7C", "1A", "4C", "3A", "4B", "4A", "5C", "8A"))
+         Site = fct_relevel(Site, "6B", "6C", "5A", "7B", "6A", "7A", "1B", "1C", "2C", "3B", "5B", "8A", "2B", "3C", "2A", "7C", "1A", "4C", "3A", "4B", "4A", "5C", "8B"))
 
 # recorder the sites by site average Leq
 sites <- sites %>% 
   mutate(holder = 1,
          Site = factor(Site), 
-         Site = fct_relevel(Site, "6B", "6C", "5A", "7B", "6A", "7A", "1B", "1C", "2C", "3B", "5B", "8B", "2B", "3C", "2A", "7C", "1A", "4C", "3A", "4B", "4A", "5C", "8A")) 
+         Site = fct_relevel(Site, "6B", "6C", "5A", "7B", "6A", "7A", "1B", "1C", "2C", "3B", "5B", "8A", "2B", "3C", "2A", "7C", "1A", "4C", "3A", "4B", "4A", "5C", "8B")) 
 
 # a representation of the site average Leq that can be added to the top of the final figure
 vibe_sites <- ggplot(sites, aes(x = Site, y = holder, fill = mean_leq)) +
