@@ -23,7 +23,13 @@ site.pca <- PCA(pca[,1:4], graph = FALSE)
 ```{r correlation_plot, echo = FALSE, message = FALSE, warning = FALSE}
 fviz_eig(site.pca, addlabels = TRUE)
 var <- get_pca_var(site.pca)
-corrplot(var$cos2, is.corr=FALSE)
+colnames(var$cos2) <- c("PC1", "PC2", "PC3", "PC4")
+rownames(var$cos2) <- c("Imperv.\nCover", "Traffic \nDistance", "Traffic", "Road \nLength")
+corrplot(var$cos2, is.corr=FALSE, tl.col = "black", addCoef.col = 1, number.cex = 0.5, tl.cex = 0.5, cl.cex = 0.5)
+
+jpeg("figures/pca_corrplot.jpeg", width = 3.25, height = 3.25, units = "in", quality = 100, res = 300)
+corrplot(var$cos2, is.corr=FALSE, tl.col = "black", addCoef.col = 1, number.cex = 0.5, tl.cex = 0.5, cl.cex = 0.5)
+dev.off()
 ```
 
 All variables contribute to Dimension 1. Traffic has a larger contribution to Dimension 2 than 1. Dimension 1 explains `r round(site.pca$eig[1,2], 1)`% of the variance, and Dimension 2 explains `r round(site.pca$eig[2,2], 1)`% of the variance. 

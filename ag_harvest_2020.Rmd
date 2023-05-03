@@ -101,12 +101,28 @@ p2 <- ggplot() +
   annotate(geom = "text", x = as.Date("2020-08-16"), y = 30, label = "Visit 1", color = "black", size = 3) +
   annotate(geom = "text", x = as.Date("2020-09-11"), y = 30, label = "Visit 2", color = "black", size = 3) +
   annotate(geom = "text", x = as.Date("2020-10-02"), y = 30, label = "Visit 3", color = "black", size = 3) +
-  annotate(geom = "text", x = as.Date("2020-10-18"), y = 30, label = "Visit 4", color = "black", size = 3)
+  annotate(geom = "text", x = as.Date("2020-10-18"), y = 30, label = "Visit 4", color = "black", size = 3) +
+  annotate(geom = "text", x = as.Date("2020-09-11"), y = 28, label = "15%", color = "#e6ab02", size = 2) +
+  annotate(geom = "text", x = as.Date("2020-10-01"), y = 28, label = "34%", color = "#e6ab02", size = 2) +
+  annotate(geom = "text", x = as.Date("2020-10-17"), y = 28, label = "51%", color = "#e6ab02", size = 2) +
+  annotate(geom = "text", x = as.Date("2020-09-11"), y = 27, label = "16%", color = "#66a61e", size = 2) +
+  annotate(geom = "text", x = as.Date("2020-10-01"), y = 27, label = "70%", color = "#66a61e", size = 2) +
+  annotate(geom = "text", x = as.Date("2020-10-17"), y = 27, label = "14%", color = "#66a61e", size = 2) +
+  annotate(geom = "text", x = as.Date("2020-09-11"), y = 26, label = "15%", color = "black", size = 2) +
+  annotate(geom = "text", x = as.Date("2020-10-01"), y = 26, label = "55%", color = "black", size = 2) +
+  annotate(geom = "text", x = as.Date("2020-10-17"), y = 26, label = "30%", color = "black", size = 2)
+
 jpeg("figures/harvest_Lan.jpeg", width = 3.25, height = 3, units = "in", quality = 100, res = 300)
 print(p2)
 dev.off()
 
 p2
 ```
+
+Corn v2 = 11%, v3 = 26%, v4 = 39%
+
+Soybean v2 = 15%, v3 = 68%, v4 = 14%
+
+Mean v2 = 13%, v3 = 47%, v4 = 26%
 
 Based on data from the USDA (https://ipad.fas.usda.gov/rssiws/al/us_cropprod.aspx), corn and soybeans are the main crops grown in Lancaster County, Nebraska. So, for this graph, we limit the analysis to only corn and soybeans. 
