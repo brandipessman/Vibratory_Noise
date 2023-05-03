@@ -1,59 +1,972 @@
 ---
 title: "Choice Test"
-output: html_notebook
+output:
+  html_document:
+    df_print: paged
 ---
 
 ```{r libraries, include = FALSE}
-library(tidyverse)
+library(tidyverse) # graphs and pipes
+library(car) # Anova test
+library(broom) # to use the augment function
+library(ggpubr) # to arrange multiple plots
+library(AER) # testing for overdispersion
+library(glmtoolbox) # test gvif
+library(betareg) # beta regressions
+library(lmtest) # to run likelihood ratio test 
+library(emmeans) # joint test of terms in a model
+library(MASS) # negative binomial
+library(multcomp) # multiple comparisons
+
+th <- theme_classic() +
+  theme(text = element_text(size = 11, color = "black"),
+        axis.text = element_text(size = 11, color = "black"),
+        axis.title = element_text(size = 11, color = "black"),
+        legend.text = element_text(size = 11, color = "black"),
+        legend.title = element_text(size = 11, color = "black"))
 ```
 
-```{r import, include = FALSE}
+```{r import, include = FALSE, warning = FALSE, message = FALSE}
 choice <- read.csv("data/choice.csv", header = TRUE) %>% 
   mutate(Origin = as.factor(Origin), 
+         # change origin from loud and quiet ot urban and rural
          Origin = fct_recode(Origin, "Urban" = "Loud", "Rural" = "Quiet"),
-         Origin = fct_relevel(Origin, "Urban", "Rural"),
-         Site = factor(Site),
-         Site = fct_relevel(Site, "6C", "5A", "8B", "8A"))
-table(choice$Site,  choice$side_w_more)
-chisq.test(choice$Site,  choice$side_w_more, correct = FALSE)
+         # put rural first
+         Origin = fct_relevel(Origin, "Rural", "Urban"),
+         Site_cat = factor(Site),
+         # orders sites in increasing noise order
+         Site_cat = fct_relevel(Site_cat, "5A", "6C", "8A", "8B"),
+         # give sites a continuous variable from 1 to 4 
+         Site_ord = ifelse(Site_cat == "6C", 2, 
+                        ifelse(Site_cat == "5A", 1, 
+                               ifelse(Site_cat == "8A", 3, 4))), 
+         # let's use the molt day as 1 day old instead of 0 days old
+         Age = Age + 1,
+         # mass is given as grams; let's convert them to milligrams
+         mass_mg = before_spider_mass * 1000,
+         # to calculate condition, we need log mass and log cephalothorax width
+         log_mass_mg = log(mass_mg), 
+         log_ceph_mm = log(ceph_width_mm))
 
-choice_silk <- choice %>% 
-  pivot_longer(cols = c(loud_silk:quiet_silk), names_to = "Container", values_to = "silk_mass") %>% 
-  dplyr::select(ID, Origin, Site, Container, silk_mass) %>% 
-  mutate(Container = as.factor(Container), 
-         Container = fct_recode(Container, "Loud" = "loud_silk", "Quiet" = "quiet_silk"))
-
-choice_silk %>% 
-  ggplot(aes(x = (silk_mass))) +
-  geom_density()
-choice_silk %>% 
-  ggplot(aes(x = sqrt(silk_mass))) +
-  geom_density()
-
-shapiro.test(sqrt(choice_silk$silk_mass))
-
-model.lm <- lm(sqrt(silk_mass) ~ Container * Site, data = choice_silk)
-car::Anova(model.lm)
-summary(model.lm)
-
-choice_silk_per <- choice %>% 
-  pivot_longer(cols = c(per_loud_notunnel:per_quiet_notunnel), names_to = "Container", values_to = "per_silk_mass") %>% 
-  dplyr::select(ID, Origin, Site, Container, per_silk_mass) %>% 
-  mutate(Container = as.factor(Container), 
-         Container = fct_recode(Container, "Loud" = "per_loud_notunnel", "Quiet" = "per_quiet_notunnel"))
-
-choice_silk_per %>% 
-  ggplot(aes(x = sqrt(per_silk_mass))) +
-  geom_density()
-
-shapiro.test(sqrt(choice_silk_per$per_silk_mass))
-
-model <- aov(per_silk_mass ~ Container * Site, data = choice_silk_per)
-summary(model)
-
-choice_silk_per2 <- choice_silk_per %>% 
-  mutate(per_silk_mass = per_silk_mass / 100)
-
-model <- glmmTMB(per_silk_mass ~ Container * Site + (Site|ID), data = choice_silk_per2, family=beta_family)
-summary(model)
+# calculates spider condition - the residuals of the linear model with log mass and log cephalothorax width
+rownames(choice) <- c(choice$ID)
+cond.reg <- lm(log_mass_mg ~ log_ceph_mm, data = choice)
+condition <- residuals(cond.reg)
+ID <-names(residuals(cond.reg))
+cond <- data.frame(cbind(condition, ID))
+# add condition to the choice dataset
+choice <- full_join(choice, cond, by = "ID") %>% 
+  mutate(condition = as.numeric(condition))
 ```
+
+# Side with More Silk
+
+The first thing we want to do is assess the number of spiders that "chose" (put more silk) on the loud side over the quiet side, and compare it across sites. Thus, the choice should be the dependent variable while the site is the independent variable. We can ask this question in a number of ways. Let's see a quick breakdown of the data.
+
+```{r summary_spiders, echo = FALSE}
+choice %>% 
+  # make side a binary variable where choosing loud is given a 1 and quiet 0
+  mutate(side = ifelse(side_w_more == "loud", 1, 0),
+         # let's add the known site average Leq values
+         mean_leq = ifelse(Site_cat == "5A", -69,
+                           ifelse(Site_cat == "6C", -69,
+                                  ifelse(Site_cat == "8A", -64, -55)))) %>% 
+  # group by all the different ways we can use site
+  group_by(Site_cat, Site_ord, mean_leq, Origin) %>% 
+  # count the number of loud and quiet choices
+  count(side_w_more) %>% 
+  pivot_wider(names_from = "side_w_more", values_from = "n") %>% 
+  # calculate the proportion of spiders that chose loud
+  mutate(prop = round(loud / (loud + quiet), 2))
+```
+
+Site can be used as **categorical** or **ordinal** or replaced by **Leq** or **origin** (rural vs urban). We've decided to refrain from using site as a categorical variable because there is some logical ordering of the sites (by leq).
+
+Choice can be also be assessed in a number of ways:
+
+- **binary** data with a binomial distribution (logistic regression) - preferred
+
+- **proportional** data with a beta distribution
+
+- **count** data with a poisson distribution
+
+## Logisitic Regression
+
+Choice can be **binomial** with 1's entered from loud choice and 0 entered for quiet choice. We can include age (days since maturation) and body condition (residuals of lm of log mass and log cephalothorax width). This is our preferred method.
+
+```{r binomial_stats, echo = FALSE}
+choice_binomial <- choice %>% 
+  # to make the data less distracting, let's grab only what we need
+  dplyr::select(ID, Age, Site_cat, Site_ord, Origin, side_w_more, condition) %>% 
+  # make the chosen side a binary variable where loud is 1 and quiet is 0
+  mutate(side = ifelse(side_w_more == "loud", 1, 0),
+         # add associated site average Leq with each site
+         mean_leq = ifelse(Site_cat == "5A", -69,
+                           ifelse(Site_cat == "6C", -69,
+                                  ifelse(Site_cat == "8A", -64, -55))))
+
+# Site as ordinal
+binom <- glm(side ~ Site_ord * Age + Site_ord * condition, data = choice_binomial, family = binomial(link = 'logit'))
+drop1(binom, test = "Chisq")
+binom2 <- update(binom, .~. -Site_ord:condition)
+drop1(binom2, test = "Chisq")
+binom3 <- update(binom2, .~. -condition)
+drop1(binom3, test = "Chisq")
+summary(binom3)
+# I like this test, but it makes more sense to use leq since we don't have any evidence to determine the order of the two -69 dB sites
+
+# using Leq
+binoml <- glm(side ~ mean_leq * Age + mean_leq * condition, data = choice_binomial, family = binomial)
+drop1(binoml, test = "Chisq")
+binoml2 <- update(binoml, .~. -mean_leq:condition)
+drop1(binoml2, test = "Chisq")
+binoml3 <- update(binoml2, .~. -condition)
+drop1(binoml3, test = "Chisq")
+summary(binoml3)
+
+# because we still want to capture the what individual sites are doing, we can look at the subsets
+# subsets
+choice_binomial_8B <- choice_binomial %>% 
+  filter(Site_cat == "8B")
+binom_8B <- glm(side ~ Age, data = choice_binomial_8B, family = binomial(link = 'logit'))
+summary(binom_8B)
+choice_binomial_8A <- choice_binomial %>% 
+  filter(Site_cat == "8A")
+binom_8A <- glm(side ~ Age, data = choice_binomial_8A, family = binomial(link = 'logit'))
+summary(binom_8A)
+choice_binomial_6C <- choice_binomial %>% 
+  filter(Site_cat == "6C")
+binom_6C <- glm(side ~ Age, data = choice_binomial_6C, family = binomial(link = 'logit'))
+summary(binom_6C)
+choice_binomial_5A <- choice_binomial %>% 
+  filter(Site_cat == "5A")
+binom_5A <- glm(side ~ Age, data = choice_binomial_5A, family = binomial(link = 'logit'))
+summary(binom_5A)
+
+choice_binomial_urban <- choice_binomial %>% 
+  filter(Origin == "Urban")
+binom_u <- glm(side ~ Age, data = choice_binomial_urban, family = binomial(link = 'logit'))
+summary(binom_u)
+choice_binomial_rural <- choice_binomial %>% 
+  filter(Origin == "Rural")
+binom_r <- glm(side ~ Age, data = choice_binomial_rural, family = binomial(link = 'logit'))
+summary(binom_r)
+
+binom_all <- glm(side ~ Age, data = choice_binomial, family = binomial(link = 'logit'))
+summary(binom_all)
+
+# using origin
+binomc <- glm(side ~ Origin * Age + Origin * condition, data = choice_binomial, family = binomial)
+drop1(binomc, test = "Chisq")
+binomc2 <- update(binomc, .~. -Origin:condition)
+drop1(binomc2, test = "Chisq")
+binomc3 <- update(binomc2, .~. -condition)
+drop1(binomc3, test = "Chisq")
+#Anova(binomc3)
+# Similar results for mean_leq and orgin
+```
+
+Increasing site loudness produced spiders increasingly more likely to select loud vibratory envrionments (z = `r round(coef(binom3)[2], 2)`, df = `r binom3$df.resid`, P `r ifelse(round(coef(summary(binom3))[2,4], 3) == 0, print("< 0.001"), print(paste("=", round(coef(summary(binom3))[2,4], 3))))`). There is not a signficant effect of age (z = `r round(coef(binom3)[3], 2)`, df = `r binom3$df.resid`, P `r ifelse(round(coef(summary(binom3))[3,4], 3) == 0, print("< 0.001"), print(paste("=", round(coef(summary(binom3))[3,4], 3))))`). There is a significant interaction between site and age (z = `r round(coef(binom3)[4], 2)`, df = `r binom3$df.resid`, P `r ifelse(round(coef(summary(binom3))[4,4], 3) == 0, print("< 0.001"), print(paste("=", round(coef(summary(binom3))[4,4], 3))))`).
+
+**Assumption 1: linearity between between predictor and the logit of the outcome**
+
+```{r binomial_assumption1, echo = FALSE}
+q_Age <- quantile(choice_binomial$Age, probs = c(0, 0.25, 0.5, 0.75, 1))
+Age1 <- mean(choice_binomial$side[choice_binomial$Age < q_Age[2]])
+Age2 <- mean(choice_binomial$side[choice_binomial$Age >= q_Age[2] & choice_binomial$Age < q_Age[3]])
+Age3 <- mean(choice_binomial$side[choice_binomial$Age >= q_Age[3] & choice_binomial$Age < q_Age[4]])
+Age4 <- mean(choice_binomial$side[choice_binomial$Age >= q_Age[4]])
+probs_Age <- c(Age1, Age2, Age3, Age4)
+logits_Age <- log(probs_Age / (1 - probs_Age))
+meds_Age <- c(median(choice_binomial$Age[choice_binomial$Age < q_Age[2]]),
+          median(choice_binomial$Age[choice_binomial$Age >= q_Age[2] & choice_binomial$Age < q_Age[3]]),
+          median(choice_binomial$Age[choice_binomial$Age >= q_Age[3] & choice_binomial$Age < q_Age[4]]),
+          median(choice_binomial$Age[choice_binomial$Age >= q_Age[4]])
+          )
+
+Site1 <- mean(choice_binomial$side[choice_binomial$Site_ord == 1])
+Site2 <- mean(choice_binomial$side[choice_binomial$Site_ord == 2])
+Site3 <- mean(choice_binomial$side[choice_binomial$Site_ord == 3])
+Site4 <- mean(choice_binomial$side[choice_binomial$Site_ord == 4])
+probs_Site <- c(Site1, Site2, Site3, Site4)
+logits_Site <- log(probs_Site / (1 - probs_Site))
+meds_Site <- c(median(choice_binomial$Site_ord[choice_binomial$Site_ord == 1]),
+          median(choice_binomial$Site_ord[choice_binomial$Site_ord == 2]),
+          median(choice_binomial$Site_ord[choice_binomial$Site_ord == 3]),
+          median(choice_binomial$Site_ord[choice_binomial$Site_ord == 4])
+          )
+
+leq1 <- mean(choice_binomial$side[choice_binomial$mean_leq == -69])
+leq2 <- mean(choice_binomial$side[choice_binomial$mean_leq == -64])
+leq3 <- mean(choice_binomial$side[choice_binomial$mean_leq == -55])
+probs_leq <- c(leq1, leq2, leq3)
+logits_leq <- log(probs_leq / (1 - probs_leq))
+meds_leq <- c(median(choice_binomial$mean_leq[choice_binomial$mean_leq == -69]),
+          median(choice_binomial$mean_leq[choice_binomial$mean_leq == -64]),
+          median(choice_binomial$mean_leq[choice_binomial$mean_leq == -55])
+          )
+
+par(mfrow = c(1,3))
+plot(meds_Age, logits_Age)
+abline(lm(logits_Age ~ meds_Age))
+plot(meds_Site, logits_Site)
+abline(lm(logits_Site ~ meds_Site))
+plot(meds_leq, logits_leq)
+abline(lm(logits_leq ~ meds_leq))
+
+```
+
+This looks pretty good. 
+
+**Assumption 2: no outliers**
+
+```{r binomial_assumption2, echo = FALSE}
+model.data <- augment(binom3) %>% 
+  mutate(index = 1:n()) 
+model.data %>% 
+  filter(abs(.std.resid) > 3)
+
+model.data <- augment(binoml3) %>% 
+  mutate(index = 1:n()) 
+model.data %>% 
+  filter(abs(.std.resid) > 3)
+```
+
+No outliers.
+
+**Assumption 3: no multicollinearity**
+
+```{r binomial_assumption3, echo = FALSE}
+binom <- glm(side ~ Site_ord + Age, data = choice_binomial, family = binomial(link = 'logit'))
+gvif(binom)
+binom <- glm(side ~ mean_leq + Age, data = choice_binomial, family = binomial(link = 'logit'))
+gvif(binom)
+```
+
+No highly correlated. Let's graph the results
+
+```{r binomial_graphs, echo = FALSE}
+# site effect
+binom3$call
+data <- choice_binomial %>% 
+  # let's use above and below the median age, labeling them as 15 and 32 just makes faceting easier later
+  group_by(Site_ord) %>% 
+  count(side_w_more) %>% 
+  mutate(side_w_more = fct_relevel(side_w_more, "quiet", "loud")) 
+pred_site <- data.frame(Effect("Site_ord", binom3, residuals = TRUE))
+ggplot() +
+  geom_bar(aes(fill = side_w_more, y = n, x = factor(Site_ord)), position="fill", stat="identity", data = data, alpha = 0.75) +
+  geom_hline(yintercept = 0.5, linetype = 2) +
+  geom_line(aes(x = Site_ord, y = fit), data = pred_site) +
+  geom_ribbon(aes(x = Site_ord, ymin = fit - (se * 1.96), ymax = fit + (se * 1.96)), data = pred_site, alpha = 0.5) +
+  scale_x_discrete(labels = c("1" = "5A \n(-69 dB)", "2" = "6C \n(-69 dB)", "3" = "8A \n(-64 dB)", "4" = "8B \n(-55 dB)")) +
+  scale_fill_manual("Side with \nMore Silk", 
+                    values = c("#1B9E77", "#D95F02"),
+                    labels = c("Quiet", "Loud")) +
+  xlab("Site \n(Site Average Leq)") +
+  ylab("Proportion of Spiders") +
+  th
+
+# leq effect
+binoml3$call
+data <- choice_binomial %>% 
+  # let's use above and below the median age, labeling them as 15 and 32 just makes faceting easier later
+  group_by(mean_leq) %>% 
+  count(side_w_more) %>% 
+  mutate(side_w_more = fct_relevel(side_w_more, "quiet", "loud")) 
+pred_site <- data.frame(Effect("mean_leq", binomb3, residuals = TRUE))
+ggplot() +
+  geom_bar(aes(fill = side_w_more, y = n, x = mean_leq), position="fill", stat="identity", data = data, alpha = 0.75) +
+  geom_hline(yintercept = 0.5, linetype = 2) +
+  geom_line(aes(x = mean_leq, y = fit), data = pred_site) +
+  geom_ribbon(aes(x = mean_leq, ymin = fit - (se * 1.96), ymax = fit + (se * 1.96)), data = pred_site, alpha = 0.5) +
+  scale_x_continuous(breaks = c(-69, -64, -55)) +
+  scale_fill_manual("Side with \nMore Silk", 
+                    values = c("#1B9E77", "#D95F02"),
+                    labels = c("Quiet", "Loud")) +
+  xlab("Site Average Leq (dB, 20-1000 Hz)") +
+  ylab("Proportion of Spiders") +
+  th
+
+# Age effect
+data <- choice_binomial %>% 
+  # let's use above and below the median age, labeling them as 15 and 32 just makes faceting easier later
+  mutate(quant_Age = ifelse(Age < quantile(Age, 0.25), quantile(Age, 0.25),
+                            ifelse (Age >= quantile(Age, 0.25) & Age < quantile(Age, 0.5), quantile(Age, 0.5),
+                                    ifelse(Age >= quantile(Age, 0.5) & Age < quantile(Age, 0.75), quantile(Age, 0.75), quantile(Age, 1))))) %>% 
+  group_by(quant_Age) %>% 
+  count(side_w_more) %>% 
+  mutate(side_w_more = fct_relevel(side_w_more, "quiet", "loud")) 
+pred_age <- data.frame(Effect("Age", binoml3, residuals = TRUE))
+ggplot() +
+  geom_bar(aes(fill=side_w_more, y = n, x = quant_Age), position="fill", stat="identity", data = data, alpha = 0.75) +
+  geom_hline(yintercept = 0.5, linetype = 2) +
+  geom_line(aes(x = Age, y = fit), data = pred_age) +
+  geom_ribbon(aes(x = Age, ymin = fit - (se * 1.96), ymax = fit + (se * 1.96)), data = pred_age, alpha = 0.5) +
+  scale_x_continuous(breaks = c(0, 15, 26, 32, 48)) +
+  scale_fill_manual("Side with \nMore Silk", 
+                    values = c("#1B9E77", "#D95F02"),
+                    labels = c("Quiet", "Loud")) +
+  xlab("Age (days)") +
+  ylab("Proportion of Spiders") +
+  th
+
+# Site age ineraction
+# this grabs the data we need to make stacked bar plots of raw proportions
+data <- choice_binomial %>% 
+  # let's use above and below the median age, labeling them as 15 and 32 just makes faceting easier later
+  mutate(Age = ifelse(Age < median(Age), 15, 32)) %>% 
+  group_by(Site_ord, Age) %>% 
+  count(side_w_more) %>% 
+  mutate(side_w_more = fct_relevel(side_w_more, "quiet", "loud")) 
+# these will be the facet labels
+labs <- c("Bars: Proportion < Median Age \nPredictions: Proportion at 1st Quartile Age",
+          "Bars: Proportion >= Median Age \nPredictions: Proportion at 3rd Quartile Age")
+names(labs) <- c("15", "32")
+
+nd = expand.grid(Site_ord = seq(1, 4, 1),
+                Age = quantile(choice_binomial$Age, probs = c(0.25, 0.75)))
+nd <- add_column(nd, fit = predict(binom3, newdata = nd, type = "response"),
+                 se = predict(binom3, newdata = nd, type = "response", se.fit = TRUE)$se.fit)
+num_site <- ggplot() +
+  geom_bar(aes(fill=side_w_more, y=n, x=Site_ord), position="fill", stat="identity", data = data, alpha = 0.75) +
+  geom_hline(yintercept = 0.5, linetype = 2) +
+  geom_line(aes(x = factor(Site_ord), y = fit, group = factor(Age)), data = nd) +
+  geom_ribbon(aes(x = factor(Site_ord), ymin = fit - (se * 1.96), ymax = fit + (se * 1.96), group = factor(Age)), data = nd, alpha = 0.5) +
+  scale_x_discrete(labels = c("1" = "5A \n(-69 dB)", "2" = "6C \n(-69 dB)", "3" = "8A \n(-64 dB)", "4" = "8B \n(-55 dB)")) +
+  scale_fill_manual("Side with \nMore Silk", 
+                    values = c("#1B9E77", "#D95F02"),
+                    labels = c("Quiet", "Loud")) +
+  xlab("Site \n(Site Average Leq)") +
+  ylab("Proportion of Spiders") +
+  th +
+  facet_wrap(~Age, labeller = labeller(Age = labs))
+
+jpeg("figures/num_site.jpeg", width = 6.5, height = 4, units = "in", quality = 100, res = 300)
+print(num_site)
+dev.off()
+num_site
+
+# leq age interaction
+data <- choice_binomial %>% 
+  # let's use above and below the median age, labeling them as 15 and 32 just makes faceting easier later
+  mutate(Age = ifelse(Age < median(Age), 15, 32)) %>% 
+  group_by(mean_leq, Age) %>% 
+  count(side_w_more) %>% 
+  mutate(side_w_more = fct_relevel(side_w_more, "quiet", "loud")) 
+labs <- c("Bars: Proportion < Median Age \nPredictions: Proportion at 1st Quartile Age",
+          "Bars: Proportion >= Median Age \nPredictions: Proportion at 3rd Quartile Age")
+names(labs) <- c("15", "32")
+nd = expand.grid(mean_leq = seq(-70, -54, 0.2),
+                Age = quantile(choice_binomial$Age, probs = c(0.25, 0.75)))
+nd <- add_column(nd, fit = predict(binomb3, newdata = nd, type = "response"),
+                 se = predict(binomb3, newdata = nd, type = "response", se.fit = TRUE)$se.fit)
+num_leq <- ggplot() +
+  geom_bar(aes(fill=side_w_more, y=n, x=mean_leq), position="fill", stat="identity", data = data, alpha = 0.75) +
+  geom_hline(yintercept = 0.5, linetype = 2) +
+  geom_line(aes(x = mean_leq, y = fit, group = factor(Age)), data = nd) +
+  geom_ribbon(aes(x = mean_leq, ymin = fit - (se * 1.96), ymax = fit + (se * 1.96), group = factor(Age)), data = nd, alpha = 0.5) +
+  scale_x_continuous(breaks = c(-69, -64, -55)) +
+  scale_fill_manual("Side with \nMore Silk", 
+                    values = c("#1B9E77", "#D95F02"),
+                    labels = c("Quiet", "Loud")) +
+  xlab("Site Average Leq (dB, 20-1000 Hz)") +
+  ylab("Proportion of Spiders") +
+  th +
+  facet_wrap(~Age, labeller = labeller(Age = labs))
+jpeg("figures/num_leq.jpeg", width = 6.5, height = 4, units = "in", quality = 100, res = 300)
+print(num_leq)
+dev.off()
+num_leq
+
+# origin for funsies
+nd = expand.grid(Origin = levels(factor(choice_binomial$Origin)),
+                Age = seq(0, 50, 0.5))
+nd <- add_column(nd, fit = predict(binomc3, newdata = nd, type = "response"),
+                 se = predict(binomc3, newdata = nd, type = "response", se.fit = TRUE)$se.fit)
+nd %>% 
+ggplot(aes(x = Age, y = fit, group = Origin, color = Origin, fill = Origin)) +
+  geom_hline(yintercept = 0.5, linetype = 2) +
+  geom_line() +
+  geom_ribbon(aes(ymin = fit - (se * 1.96), ymax = fit + (se * 1.96)), alpha = 0.2) +
+  ylab("Proportion of Spiders") +
+  xlab("Age (days since maturation)") +
+  scale_fill_manual("Category", 
+                    values = c("#1B9E77", "#D95F02"),
+                    labels = c("Rural", "Urban")) +
+  scale_color_manual("Category", 
+                    values = c("#1B9E77", "#D95F02"),
+                    labels = c("Rural", "Urban")) +
+  th
+```
+
+```{r binomial_graph_site, echo = FALSE}
+pred_8B = expand.grid(Site = "8B",
+                Age = quantile(choice_binomial_8B$Age, probs = c(0.25, 0.75))) 
+pred_8B <- add_column(pred_8B, fit = predict(binom_8B, type = "response", newdata = pred_8B),
+                      se = predict(binom_8B, type = "response", newdata = pred_8B, se.fit = TRUE)$se.fit) %>% 
+  mutate(quantile = ifelse(Age == min(Age), "q0.25", "q0.75"))
+
+pred_8A = expand.grid(Site = "8A",
+                Age = quantile(choice_binomial_8A$Age, probs = c(0.25, 0.75)))
+pred_8A <- add_column(pred_8A, fit = predict(binom_8A, type = "response", newdata = pred_8A),
+                      se = predict(binom_8A, type = "response", newdata = pred_8A, se.fit = TRUE)$se.fit) %>% 
+  mutate(quantile = ifelse(Age == min(Age), "q0.25", "q0.75"))
+
+pred_6C = expand.grid(Site = "6C",
+                Age = quantile(choice_binomial_6C$Age, probs = c(0.25, 0.75)))
+pred_6C <- add_column(pred_6C, fit = predict(binom_6C, type = "response", newdata = pred_6C),
+                      se = predict(binom_6C, type = "response", newdata = pred_6C, se.fit = TRUE)$se.fit) %>% 
+  mutate(quantile = ifelse(Age == min(Age), "q0.25", "q0.75"))
+
+pred_5A = expand.grid(Site = "5A",
+                Age = quantile(choice_binomial_5A$Age, probs = c(0.25, 0.75)))
+pred_5A <- add_column(pred_5A, fit = predict(binom_5A, type = "response", newdata = pred_5A),
+                      se = predict(binom_5A, type = "response", newdata = pred_5A, se.fit = TRUE)$se.fit) %>% 
+  mutate(quantile = ifelse(Age == min(Age), "q0.25", "q0.75"))
+
+pred_all = expand.grid(Site = "all",
+                Age = quantile(choice_binomial$Age, probs = c(0.25, 0.75)))
+pred_all <- add_column(pred_all, fit = predict(binom_all, type = "response", newdata = pred_all),
+                      se = predict(binom_all, type = "response", newdata = pred_all, se.fit = TRUE)$se.fit) %>% 
+  mutate(quantile = ifelse(Age == min(Age), "q0.25", "q0.75"))
+
+pred <- rbind(pred_8B, pred_8A, pred_6C, pred_5A) #pred_all
+
+data <- choice_binomial %>% 
+  # let's use above and below the median age, labeling them as 15 and 32 just makes faceting easier later
+  mutate(Age = ifelse(Age < median(Age), 15, 32)) %>% 
+  group_by(Site_cat, Age) %>% 
+  count(side_w_more) %>% 
+  mutate(side_w_more = fct_relevel(side_w_more, "quiet", "loud")) %>% 
+  mutate(quantile = ifelse(Age == 15, "q0.25", "q0.75"))
+
+data3 <- choice_binomial %>% 
+  # let's use above and below the median age, labeling them as 15 and 32 just makes faceting easier later
+  mutate(Age = ifelse(Age < median(Age), 15, 32)) %>% 
+  group_by(Site_cat, Age) %>% 
+  count() %>% 
+  mutate(quantile = ifelse(Age == 15, "q0.25", "q0.75"))
+
+#data2 <- choice_binomial %>% 
+  # let's use above and below the median age, labeling them as 15 and 32 just makes faceting easier later
+#  mutate(Age = ifelse(Age < median(Age), 15, 32)) %>% 
+#  group_by(Age) %>% 
+#  count(side_w_more) %>% 
+#  mutate(side_w_more = fct_relevel(side_w_more, "quiet", "loud"),
+#         Site_cat = "all") %>% 
+#  dplyr::select(Site_cat, Age, side_w_more, n)
+
+#data <- rbind(data, data2) %>% 
+#  mutate(quantile = ifelse(Age == 15, "q0.25", "q0.75"))
+
+labs <- c("Bars: Proportion < Median Age \nPredictions: Proportion at 1st Quartile Age",
+          "Bars: Proportion >= Median Age \nPredictions: Proportion at 3rd Quartile Age")
+names(labs) <- c("q0.25", "q0.75")
+
+num_site_sub <- ggplot() +
+  geom_bar(aes(fill = side_w_more, y = n, x = Site_cat), position="fill", stat="identity", data = data, alpha = 0.75) +
+  geom_hline(yintercept = 0.5, linetype = 2) +
+  geom_point(aes(x = Site, y = fit), data = pred, size = 1.5) +
+  geom_errorbar(aes(x = Site, ymin = fit - se, ymax = fit + se), data = pred, width = 0.15) +
+  #geom_text(aes(x = Site, y = -0.05, label = Age), data = pred, size = 3) +
+  geom_text(aes(x = Site_cat, y = 1.05, label = paste("n = ", n)), data = data3, size = 3) +
+  scale_x_discrete(labels = c("5A" = "5A \n(-69 dB)", "6C" = "6C \n(-69 dB)", "8A" = "8A \n(-64 dB)", "8B" = "8B \n(-55 dB)")) +
+  scale_fill_manual("Side with \nMore Silk", 
+                    values = c("#1B9E77", "#D95F02"),
+                    labels = c("Quiet", "Loud")) +
+  xlab("Site \n(Site Average Leq)") +
+  ylab("Proportion of Spiders") +
+  th +
+  facet_wrap(~quantile, labeller = labeller(quantile = labs))
+
+jpeg("figures/num_site_sub.jpeg", width = 6.5, height = 4, units = "in", quality = 100, res = 300)
+print(num_site_sub)
+dev.off()
+num_site_sub
+```
+
+## Beta Distribution
+
+Choice can be **proportional** by the proportion of spiders that chose loud over quiet. We can't, however, include age or body condition, and our sample size reduces to four (one for each site).
+
+```{r prop, echo = FALSE}
+choice_prop <- choice %>% 
+  mutate(side = ifelse(side_w_more == "loud", 1, 0),
+         mean_leq = ifelse(Site_cat == "5A", -69,
+                           ifelse(Site_cat == "6C", -69,
+                                  ifelse(Site_cat == "8A", -64, -55)))) %>% 
+  group_by(Site_cat, Site_ord, mean_leq, Origin) %>% 
+  count(side_w_more) %>% 
+  pivot_wider(names_from = "side_w_more", values_from = "n") %>% 
+  mutate(prop = round(loud / (loud + quiet), 2))
+
+model.beta.site.ord <- betareg(prop ~ Site_ord, data = choice_prop)
+lrtest(model.beta.site.ord)
+
+model.beta.leq <- betareg(prop ~ mean_leq, data = choice_prop)
+lrtest(model.beta.leq)
+
+model.beta.origin <- betareg(prop ~ Origin, data = choice_prop)
+lrtest(model.beta.origin)
+
+test_beta <- augment(model.beta.site.ord, data = choice_prop)
+resid_beta <- ggplot(test_beta, aes(x = .fitted, y = .resid)) + 
+  geom_point() + 
+  #geom_smooth() +
+  geom_hline(yintercept = 0) +
+  xlab("Fitted Values") +
+  ylab("Standardized \nResiduals") +
+  theme_classic() +
+  theme(text = element_text(size = 14, color = "black")) +
+  theme(axis.text.x=element_text(color="black", size=14)) + 
+  theme(axis.text.y=element_text(color="black", size=14))
+
+y <- quantile(test_beta$.resid, c(0.25, 0.75))
+x <- qnorm(c(0.25, 0.75))
+slope <- diff(y)/diff(x)
+int <- y[1L] - slope * x[1L]
+
+qq_beta <- ggplot(test_beta, aes(sample = .resid)) + 
+  stat_qq() + 
+  geom_abline(slope = slope, intercept = int) +
+  xlab("Theoretical Quantiles") +
+  ylab("Sample Quantiles") +
+  theme_classic() +
+  theme(text = element_text(size = 14, color = "black")) +
+  theme(axis.text.x=element_text(color="black", size=14)) + 
+  theme(axis.text.y=element_text(color="black", size=14)) 
+
+cd<-data.frame(cooks.distance(model.beta.site.ord)) 
+cd$num <- seq(1, nrow(cd), 1)
+colnames(cd) <- c("Cooksd", "Num")
+lev<-data.frame(hat(model.matrix(model.beta.site.ord)))
+lev$num <- seq(1, nrow(lev), 1)
+colnames(lev) <- c("Leverage", "Num")
+data_beta <- full_join(cd, lev, by = "Num")
+lev_beta <- data_beta %>% 
+  pivot_longer(cols = c(Leverage, Cooksd), names_to = "Variable", values_to = "Value") %>% 
+  ggplot(aes(x = Num, y = Value, color = Variable)) +
+  geom_hline(yintercept = 4/295) +
+  geom_point() +
+  theme_classic() +
+  theme(legend.position = c(0.25, 0.75))
+
+
+annotate_figure(ggarrange(resid_beta, qq_beta, lev_beta,
+          labels = c("A", "B", "C"),
+          ncol = 2, nrow = 2), top = text_grob("Beta"))
+```
+
+The beta distribution does fit and gives similar results to the binomial distribution (but without age and condition). 
+
+## Poisson Distribution
+
+A **poisson** distribution is not a good choice because our data has an upper limit (bounded by the number of spiders tested). We also could not include age (days since maturation) or body condition of the spiders in the model.
+
+```{r poisson, echo = FALSE}
+choice_poisson <- choice %>% 
+  mutate(side = ifelse(side_w_more == "loud", 1, 0),
+         mean_leq = ifelse(Site_cat == "5A", -69,
+                           ifelse(Site_cat == "6C", -69,
+                                  ifelse(Site_cat == "8A", -64, -55)))) %>% 
+  group_by(Site_cat, Site_ord, mean_leq, Origin) %>% 
+  count(side_w_more)
+
+poissona <- glm(n ~ side_w_more:Site_ord, data = choice_poisson, family = "poisson")
+Anova(poissona)
+poissona$call[2]
+poissonb <- glm(n ~ side_w_more:mean_leq, data = choice_poisson, family = "poisson")
+Anova(poissonb)
+poissonb$call[2]
+poissonc <- glm(n ~ side_w_more:Origin, data = choice_poisson, family = "poisson")
+Anova(poissonc)
+poissonc$call[2]
+
+# assumptions
+test_pois <- augment(poissona, data = choice_poisson)
+resid_pois <- ggplot(test_pois, aes(x = .fitted, y = .resid)) + 
+  geom_point() + 
+  geom_smooth() +
+  geom_hline(yintercept = 0) +
+  xlab("Fitted Values") +
+  ylab("Standardized \nResiduals") +
+  theme_classic() +
+  theme(text = element_text(size = 14, color = "black")) +
+  theme(axis.text.x=element_text(color="black", size=14)) + 
+  theme(axis.text.y=element_text(color="black", size=14))
+
+y <- quantile(test_pois$.resid, c(0.25, 0.75))
+x <- qnorm(c(0.25, 0.75))
+slope <- diff(y)/diff(x)
+int <- y[1L] - slope * x[1L]
+
+qq_pois <- ggplot(test_pois, aes(sample = .resid)) + 
+  stat_qq() + 
+  geom_abline(slope = slope, intercept = int) +
+  xlab("Theoretical Quantiles") +
+  ylab("Sample Quantiles") +
+  theme_classic() +
+  theme(text = element_text(size = 14, color = "black")) +
+  theme(axis.text.x=element_text(color="black", size=14)) + 
+  theme(axis.text.y=element_text(color="black", size=14)) 
+
+cd<-data.frame(cooks.distance(poissona)) 
+cd$num <- seq(1, nrow(cd), 1)
+colnames(cd) <- c("Cooksd", "Num")
+lev<-data.frame(hat(model.matrix(poissona)))
+lev$num <- seq(1, nrow(lev), 1)
+colnames(lev) <- c("Leverage", "Num")
+data_pois <- full_join(cd, lev, by = "Num")
+lev_pois <- data_pois %>% 
+  pivot_longer(cols = c(Leverage, Cooksd), names_to = "Variable", values_to = "Value") %>% 
+  ggplot(aes(x = Num, y = Value, color = Variable)) +
+  geom_hline(yintercept = 4/295) +
+  geom_point() +
+  theme_classic() +
+  theme(legend.position = c(0.25, 0.75))
+
+annotate_figure(ggarrange(resid_pois, qq_pois, lev_pois,
+          labels = c("A", "B", "C"),
+          ncol = 2, nrow = 2), top = text_grob("Poisson"))
+
+dispersiontest(poissona) # not overdispersed
+```
+
+The poisson distribution does fit and gives similar results to the binomial distribution (but without age and condition) when using site as an ordinal value. 
+
+# Proportion of Silk on Each Side
+
+Let's make the spider's choice more continuous than a yes/no question. We can look at the proportion of each spider's silk that was placed on the loud sides.  
+
+```{r beta_stats, echo = FALSE}
+choice_silk <- choice %>% 
+  dplyr::select(ID, Site_ord, Site_cat, Origin, Age, condition, loud_silk, quiet_silk) %>% 
+  mutate(mean_leq = ifelse(Site_cat == "5A" | Site_cat == "6C", -69,
+                           ifelse(Site_cat == "8A", -64, -55)),
+         propl = loud_silk / (loud_silk + quiet_silk))
+
+beta_leq_full <- betareg(propl ~ mean_leq * Age + mean_leq * condition, data = choice_silk)
+summary(beta_leq_full)
+
+beta_leq <- betareg(propl ~ mean_leq * Age, data = choice_silk)
+summary(beta_leq)
+lrtest(beta_leq)
+
+beta_leq_gam <- gam(propl ~ mean_leq * Age, data = choice_silk, family = betar(link = "logit"))
+summary(beta_leq_gam)
+simulateResiduals(beta_leq_gam, plot = TRUE)
+
+choice_silk_8B <- choice_silk %>% 
+  filter(Site_cat == "8B")
+beta_leq_gam_8B <- gam(propl ~ Age, data = choice_silk_8B, family = betar(link = "logit"))
+summary(beta_leq_gam_8B)
+simulateResiduals(beta_leq_gam_8B, plot = TRUE)
+
+choice_silk_8A <- choice_silk %>% 
+  filter(Site_cat == "8A")
+beta_leq_gam_8A <- gam(propl ~ Age, data = choice_silk_8A, family = betar(link = "logit"))
+summary(beta_leq_gam_8A)
+simulateResiduals(beta_leq_gam_8A, plot = TRUE)
+
+choice_silk_6C <- choice_silk %>% 
+  filter(Site_cat == "6C")
+beta_leq_gam_6C <- gam(propl ~ Age, data = choice_silk_6C, family = betar(link = "logit"))
+summary(beta_leq_gam_6C)
+simulateResiduals(beta_leq_gam_6C, plot = TRUE)
+
+choice_silk_5A <- choice_silk %>% 
+  filter(Site_cat == "5A")
+beta_leq_gam_5A <- gam(propl ~ Age, data = choice_silk_5A, family = betar(link = "logit"))
+summary(beta_leq_gam_5A)
+simulateResiduals(beta_leq_gam_5A, plot = TRUE)
+
+choice_silk_urban <- choice_silk %>% 
+  filter(Origin == "Urban")
+beta_site_gam <- gam(propl ~ 1, data = choice_silk_urban, family = betar(link = "logit"))
+summary(beta_site_gam)
+choice_silk_rural <- choice_silk %>% 
+  filter(Origin == "Rural")
+beta_site_gam <- gam(propl ~ 1, data = choice_silk_rural, family = betar(link = "logit"))
+summary(beta_site_gam)
+
+beta_site <- betareg(propl ~ Site_ord * Age, data = choice_silk)
+#summary(beta_site)
+
+beta_origin <- betareg(propl ~ Origin * Age, data = choice_silk)
+#Anova(beta_origin)
+```
+
+**Assumptions**
+
+```{r beta_assumptions, echo = FALSE}
+test_beta <- augment(beta_leq, data = choice_silk)
+resid_beta <- ggplot(test_beta, aes(x = .fitted, y = .resid)) + 
+  geom_point() + 
+  geom_smooth() +
+  geom_hline(yintercept = 0) +
+  xlab("Fitted Values") +
+  ylab("Standardized \nResiduals") +
+  theme_classic() +
+  theme(text = element_text(size = 14, color = "black")) +
+  theme(axis.text.x=element_text(color="black", size=14)) + 
+  theme(axis.text.y=element_text(color="black", size=14)) +
+  ggtitle("Residual vs Fitted Plot")
+
+y <- quantile(test_beta$.resid, c(0.25, 0.75))
+x <- qnorm(c(0.25, 0.75))
+slope <- diff(y)/diff(x)
+int <- y[1L] - slope * x[1L]
+
+qq_beta <- ggplot(test_beta, aes(sample = .resid)) + 
+  stat_qq() + 
+  geom_abline(slope = slope, intercept = int) +
+  xlab("Theoretical Quantiles") +
+  ylab("Sample Quantiles") +
+  theme_classic() +
+  theme(text = element_text(size = 14, color = "black")) +
+  theme(axis.text.x=element_text(color="black", size=14)) + 
+  theme(axis.text.y=element_text(color="black", size=14)) +
+  ggtitle("Normal Q-Q")
+
+test_beta$.std.resid <- residuals(beta_site, type = "deviance")
+scale_loc_beta <- ggplot(test_beta, aes(x = .fitted, y = sqrt(abs(.std.resid)))) + 
+  geom_point(na.rm=TRUE) +
+  geom_hline(yintercept = 0.8) +
+  stat_smooth(method="loess", na.rm = TRUE) +
+  xlab("Fitted Value") +
+  ylab(expression(sqrt("|Standardized residuals|"))) +
+  ggtitle("Scale-Location") 
+
+cook_beta <- ggplot(test_beta, aes(seq_along(.cooksd), .cooksd)) +
+  geom_bar(stat="identity", position="identity") +
+  xlab("Obs. Number") +
+  ylab("Cook's distance") +
+  ggtitle("Cook's distance") +
+  theme_bw()
+
+
+annotate_figure(ggarrange(resid_beta, qq_beta, scale_loc_beta, cook_beta,
+          labels = c("A", "B", "C", "D"),
+          ncol = 2, nrow = 2), top = text_grob("Beta Prop Silk"))
+
+test_beta %>% 
+  filter(abs(.std.resid) > 3)
+```
+
+**Graph**
+
+```{r beta_graphs, echo = FALSE}
+data <- choice_binomial %>% 
+  # let's use above and below the median age, labeling them as 15 and 32 just makes faceting easier later
+  mutate(Age = ifelse(Age < median(Age), 15, 32)) %>% 
+  group_by(mean_leq, Age) %>% 
+  count(side_w_more) %>% 
+  mutate(side_w_more = fct_relevel(side_w_more, "quiet", "loud")) 
+
+labs <- c("Bars: Proportion < Median Age \nPredictions: Proportion at 1st Quartile Age",
+          "Bars: Proportion >= Median Age \nPredictions: Proportion at 3rd Quartile Age")
+names(labs) <- c("15", "32")
+
+choice_silk2 <- choice_silk %>% 
+  mutate(Age = ifelse(Age < median(Age), "15", "32"))
+
+pred <- expand.grid(mean_leq = seq(-70, -54, 0.2),
+                 Age = quantile(choice_binomial$Age, probs = c(0.25, 0.75)))
+pred <- add_column(pred, fit = predict(beta_leq_gam, newdata = pred, type = "response"),
+                 se = predict(beta_leq_gam, newdata = pred, type = "response", se.fit = TRUE)$se.fit)
+
+prop_leq <- ggplot() +
+  geom_point(aes(x=mean_leq, y = propl), data = choice_silk2, alpha = 0.75, color = "grey") +
+  geom_hline(yintercept = 0.5, linetype = 2) +
+  geom_line(aes(x = mean_leq, y = fit, group = factor(Age)), data = pred) +
+  geom_ribbon(aes(x = mean_leq, ymin = fit - (se * 1.96), ymax = fit + (se * 1.96), group = factor(Age)), data = pred, alpha = 0.5) +
+  scale_x_continuous(breaks = c(-69, -64, -55)) +
+  scale_y_continuous(limits = c(0, 1.1), breaks = c(0, 0.25, 0.5, 0.75, 1)) +
+  scale_fill_manual("Side with \nMore Silk", 
+                    values = c("#1B9E77", "#D95F02"),
+                    labels = c("Quiet", "Loud")) +
+  xlab("Site Average Leq (dB, 20-1000 Hz)") +
+  ylab("Proportion of Silk on the Loud Side") +
+  th +
+  facet_wrap(~Age, labeller = labeller(Age = labs))
+jpeg("figures/prop_leq.jpeg", width = 6.5, height = 4, units = "in", quality = 100, res = 300)
+print(prop_leq)
+dev.off()
+prop_leq
+
+
+
+
+
+
+pred_8B = expand.grid(Site = "8B",
+                Age = quantile(choice_silk_8B$Age, probs = c(0.25, 0.75))) 
+pred_8B <- add_column(pred_8B, fit = predict(beta_leq_gam_8B, type = "response", newdata = pred_8B),
+                      se = predict(beta_leq_gam_8B, type = "response", newdata = pred_8B, se.fit = TRUE)$se.fit) %>% 
+  mutate(quantile = ifelse(Age == min(Age), "q0.25", "q0.75"))
+
+pred_8A = expand.grid(Site = "8A",
+                Age = quantile(choice_silk_8A$Age, probs = c(0.25, 0.75)))
+pred_8A <- add_column(pred_8A, fit = predict(beta_leq_gam_8A, type = "response", newdata = pred_8A),
+                      se = predict(beta_leq_gam_8A, type = "response", newdata = pred_8A, se.fit = TRUE)$se.fit) %>% 
+  mutate(quantile = ifelse(Age == min(Age), "q0.25", "q0.75"))
+
+pred_6C = expand.grid(Site = "6C",
+                Age = quantile(choice_silk_6C$Age, probs = c(0.25, 0.75)))
+pred_6C <- add_column(pred_6C, fit = predict(beta_leq_gam_6C, type = "response", newdata = pred_6C),
+                      se = predict(beta_leq_gam_6C, type = "response", newdata = pred_6C, se.fit = TRUE)$se.fit) %>% 
+  mutate(quantile = ifelse(Age == min(Age), "q0.25", "q0.75"))
+
+pred_5A = expand.grid(Site = "5A",
+                Age = quantile(choice_silk_5A$Age, probs = c(0.25, 0.75)))
+pred_5A <- add_column(pred_5A, fit = predict(beta_leq_gam_5A, type = "response", newdata = pred_5A),
+                      se = predict(beta_leq_gam_5A, type = "response", newdata = pred_5A, se.fit = TRUE)$se.fit) %>% 
+  mutate(quantile = ifelse(Age == min(Age), "q0.25", "q0.75"))
+
+
+pred <- rbind(pred_8B, pred_8A, pred_6C, pred_5A) #pred_all
+
+choice_silk2 <- choice_silk %>% 
+  mutate(quantile = ifelse(Age < median(Age), "q0.25", "q0.75"))
+
+labs <- c("Points: Proportion < Median Age \nPredictions: Proportion at 1st Quartile Age",
+          "Points: Proportion >= Median Age \nPredictions: Proportion at 3rd Quartile Age")
+names(labs) <- c("q0.25", "q0.75")
+
+prop_site_sub <- ggplot() +
+  geom_point(aes(x = Site_cat, y = propl), data = choice_silk2, alpha = 0.75, color = "grey") +
+  geom_hline(yintercept = 0.5, linetype = 2) +
+  geom_point(aes(x = Site , y = fit), data = pred, size = 2, position = position_nudge(x = 0.25)) +
+  geom_errorbar(aes(x = Site, ymin = fit - (se * 1.96), ymax = fit + (se * 1.96)), data = pred, width = 0.15, position = position_nudge(x = 0.25), linewidth = 1) +
+  geom_text(aes(x = Site_cat, y = 1.05, label = paste("n = ", n)), data = data3, size = 3) +
+  scale_x_discrete(labels = c("5A" = "5A \n(-69 dB)", "6C" = "6C \n(-69 dB)", "8A" = "8A \n(-64 dB)", "8B" = "8B \n(-55 dB)")) +
+  scale_y_continuous(limits = c(0, 1.1), breaks = c(0, 0.25, 0.5, 0.75, 1)) +
+  scale_fill_manual("Side with \nMore Silk", 
+                    values = c("#1B9E77", "#D95F02"),
+                    labels = c("Quiet", "Loud")) +
+  xlab("Site \n(Site Average Leq)") +
+  ylab("Proportion of Silk on the Loud Side") +
+  th +
+  facet_wrap(~quantile, labeller = labeller(quantile = labs))
+
+jpeg("figures/prop_site_sub.jpeg", width = 6.5, height = 4, units = "in", quality = 100, res = 300)
+print(prop_site_sub)
+dev.off()
+prop_site_sub
+```
+
+## Using Leq
+
+```{r silk_prop_leq, echo = FALSE, warning = FALSE, message = FALSE}
+# mean_leq
+choice2 <- choice %>% 
+mutate(propl = loud_silk/(loud_silk + quiet_silk),
+         mean_leq = ifelse(mean_leq == "-69", -69, 
+                           ifelse(mean_leq == "-64", -64, -55)),
+         mean_leq = abs(mean_leq))
+
+model.beta.leq2 <- betareg(propl ~ mean_leq, data = choice2)
+#summary(model.beta.leq2) # p = 0.084, pseudo r2 = 0.04105
+lrtest(model.beta.leq2)
+#joint_tests(model.beta.leq2)
+pred_leq <- data.frame(fit = unique(predict(model.beta.leq2, type = "response")),
+                       mean_leq = c(-69, -64, -55))
+
+ggplot() +
+  annotate(geom = "rect", xmin = -70, xmax = -54, ymin = 0.5 , ymax = 1.0, fill = "#D95F02", alpha = 0.5) +
+  annotate(geom = "rect", xmin = -70, xmax = -54, ymin = 0 , ymax = 0.5, fill = "#1B9E77", alpha = 0.5) +
+geom_point(aes(x = mean_leq, y = propl), data = choice) +
+  geom_line(aes(x = mean_leq, y = fit), data = pred_leq) +
+  scale_x_continuous(limits = c(-70, -54), breaks = c(-69, -64, -55), expand = c(0,0)) +
+  scale_y_continuous(limits = c(0, 1), breaks = c(0, 0.25, 0.5, 0.75, 1), expand = c(0,0)) +
+  xlab("Site Average Leq (dB, 20-1000 Hz)") +
+  ylab("Proportion of Silk Mass on Loud Side") +
+  theme_classic() +
+  theme(text = element_text(size = 12, color = "black"),
+        axis.text = element_text(size = 12, color = "black"),
+        axis.title = element_text(size = 12, color = "black"),
+        legend.text = element_text(size = 12, color = "black"),
+        legend.title = element_text(size = 12, color = "black"))
+```
+
+## Using Site
+
+```{r silk_prop_site, echo = FALSE, warning = FALSE, message = FALSE}
+# Site
+choice <- choice %>% 
+  mutate(Site = fct_relevel(Site, "6C", "5A", "8A", "8B"))
+model.beta.site2 <- betareg(propl ~ Site_num, data = choice)
+#summary(model.beta.site2) # p = 0.067, pseudo r2 = 0.04578
+lrtest(model.beta.site2)
+#joint_tests(model.beta.site2)
+nd = data.frame(Site_num = seq(1, 4, 1))
+pred_site <- data.frame(fit = predict(model.beta.site2, newdata = nd, type = "response"),
+                        site = seq(1, 4, 1),
+                        Site = c("6C", "5A", "8A", "8B")) %>% 
+  mutate(Site = factor(Site),
+         Site = fct_relevel(Site, "6C", "5A", "8A", "8B"))
+
+ggplot() +
+  scale_x_discrete() +
+  annotate(geom = "rect", xmax = 0, xmin = Inf, ymin = 0.5 , ymax = 1.0, fill = "#D95F02", alpha = 0.5) +
+  annotate(geom = "rect", xmax = 0, xmin = Inf, ymin = 0 , ymax = 0.5, fill = "#1B9E77", alpha = 0.5) +
+geom_point(aes(x = Site, y = propl), data = choice) +
+  geom_line(aes(x = site, y = fit), data = pred_site) +
+  scale_y_continuous(limits = c(0, 1), breaks = c(0, 0.25, 0.5, 0.75, 1), expand = c(0,0)) +
+  xlab("Site") +
+  ylab("Proportion of Silk Mass on Loud Side") +
+  theme_classic() +
+  theme(text = element_text(size = 12, color = "black"),
+        axis.text = element_text(size = 12, color = "black"),
+        axis.title = element_text(size = 12, color = "black"),
+        legend.text = element_text(size = 12, color = "black"),
+        legend.title = element_text(size = 12, color = "black"))
+```
+
+## Using Origin
+
+```{r silk_prop_origin, echo = FALSE, warning = FALSE, message = FALSE}
+# Origin
+choice <- choice %>% 
+  mutate(Origin = fct_relevel(Origin, "Rural", "Urban"),
+         Origin2 = as.numeric(Origin))
+model.beta.origin2 <- betareg(propl ~ Origin2, data = choice)
+#summary(model.beta.origin2) # p = 0.135, pseudo r2 = 0.03095
+lrtest(model.beta.origin2)
+#joint_tests(model.beta.origin2)
+
+```
+
+# Total Silk Use
+
+```{r silk_total, echo = FALSE, warning = FALSE, message = FALSE}
+choice <- choice %>% 
+  mutate(silk_total_microgram = silk_total * 1000)
+shapiro.test(log(choice$silk_total_microgram))
+choice %>% 
+  ggplot(aes(x = log(silk_total_microgram), color = Site)) +
+  geom_density()
+
+total <- glm.nb(silk_total_microgram ~ Site, data = choice)
+Anova(total)
+summary(glht(total, linfct = mcp(Site = "Tukey")), test = adjusted(type = "bonferroni"))
+
+ggplot(aes(x = Site, y = silk_total_microgram), data = choice) +
+  geom_boxplot()
+```
+
+# Proportional Difference
+
+## Using Origin
+
+```{r diff, echo = FALSE, warning = FALSE, message = FALSE}
+choice2 <- choice %>% 
+  mutate(diff_prop = diff/100)
+
+model.beta.diff <- betareg(diff_prop ~ Origin, data = choice2)
+#summary(model.beta.diff)
+lrtest(model.beta.diff)
+#joint_tests(model.beta.diff)
+```
+
