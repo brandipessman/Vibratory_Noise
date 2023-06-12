@@ -862,9 +862,13 @@ stay_move
 
 ## Those that Stayed - Loud or Quiet
 
+**tl;dr:** When we used a binomial regression to assess the probability of staying in the loud (1) or quiet (0) side, condition was retained in the model but was not significant. Age and condition did not significantly predict staying on a particular side within sites. 
+
 Let's also look at those that stayed and what side they chose (loud or quiet). 
 
 ### Raw Data
+
+Check out the raw data.
 
 ```{r stayed side, echo = FALSE, warning = FALSE, message = FALSE, results = 'hide'}
 stay %>% 
@@ -1020,6 +1024,10 @@ ggplot() +
 
 6C seems more likely to stay in quiet.
 
+### Stats and Assumptions
+
+Let's see what predicts whether a spider that stays chooses loud or quiet. We will use a binomial regression since we can code the data as stayed in the loud (1) or stayed in the quiet (0). We will exclude the two tunnel observations. Since we know age and condition are positively correlated, we will avoid using interactions between age and condition and we will double check the VIF of the final model after backward selection. Let's try with age and conditions as quadratic. We will scale and center all continuous variables. 
+
 ```{r stay side stats and assumptions for leq, echo = FALSE, message = FALSE, warning = FALSE}
 # of those that stayed, what side did they choose
 stay_scaled2 <- stay %>% 
@@ -1031,6 +1039,14 @@ stay_scaled2 <- stay %>%
          mean_leq = c(scale(mean_leq)),
          Age = c(scale(Age)),
          condition = c(scale(condition)))
+
+#stay.binom2a <- glm(stay_side ~  mean_leq * poly(Age, 2) + mean_leq * poly(condition, 2), data #= stay_scaled2, family = binomial)
+#stay.binom2b <- glm(stay_side ~  mean_leq * Age + mean_leq * poly(condition, 2), data = #stay_scaled2, family = binomial)
+#stay.binom2c <- glm(stay_side ~  mean_leq * poly(Age, 2) + mean_leq * condition, data = #stay_scaled2, family = binomial)
+#stay.binom2d <- glm(stay_side ~  mean_leq * Age + mean_leq * condition, data = stay_scaled2, #family = binomial)
+#anova(stay.binom2a, stay.binom2d, test = "Chisq")
+#anova(stay.binom2b, stay.binom2d, test = "Chisq")
+#anova(stay.binom2c, stay.binom2d, test = "Chisq") # Use simplest
 
 stay.binom2 <- glm(stay_side ~  mean_leq * Age + mean_leq * condition, data = stay_scaled2, family = binomial)
 stay.binom2 <- step(stay.binom2)
@@ -1142,8 +1158,35 @@ stay.binom.5a2 <- step(stay.binom.5a2)
 Anova(stay.binom.5a2, test.statistic = "Wald") # age not signif
 ```
 
+Condition stays in the model but does not show a significant difference. Condition stays in the within site models for sites 8A and 8B, but is not significant. Age stays for site 5A, but is not significant.
 
+### Graph 
 
+```{r stay side graph, eval = FALSE, message = FALSE, warning = FALSE, results = 'hide'}
+# predictions
+pred2 <- expand.grid(condition = seq(-2.5, 2, 0.04))
+pred2 <- add_column(pred2, fit = data.frame(predict(stay.binom2, newdata = pred2, type = "response", se.fit = TRUE))$fit,
+                  se = data.frame(predict(stay.binom2, newdata = pred2, type = "response", se.fit = TRUE))$se.fit )
+# back transform
+pred2$condition = pred2$condition * sd(stay$condition) + mean(stay$condition)
+
+stay2 <- stay %>% 
+  filter(stay ==1,
+         ! side_lq == "tunnel")  %>% 
+  mutate(stay_side = ifelse(side_lq == "loud", 1, 0))
+
+ggplot() +
+  geom_ribbon(aes(x = condition, y = fit, ymin = fit - (1 * se), ymax = fit + (1 * se)), data = pred2, alpha = 0.65) +
+  geom_jitter(aes(x = condition, y = stay_side), data = stay2, height = 0.05, alpha = 1, size = 1) +
+  geom_hline(yintercept = 0.5, linetype = 2) +
+  geom_line(aes(x = condition, y = fit), data = pred2, linewidth = 1) +
+  scale_x_continuous(limits = c(-0.35, 0.35), breaks = c(-0.3, -0.2, -0.1, 0, 0.1, 0.2, 0.3)) +
+  xlab("Body Condition (Residuals of Body Mass and Cephalothorax Width)") +
+  ylab("Proportion of Spiders that \nStayed on the Loud Side") +
+  th
+```
+
+Trend that spiders in poorer condition are most likely to stay on the loud side with increasing likelihood of staying in the quiet with better condition. 
 
 ## Spiders in the Tunnel 
 
