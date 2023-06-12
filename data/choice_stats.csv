@@ -1,0 +1,14 @@
+﻿Focal,Data,Variable,z,resid.df,Pvalue,R2
+Spider,stay,leq,0.52,65,0.61,0.04568
+Spider,stay,cond,-1.06,65,0.29,0.04568
+Spider,stay,leqxcond,-1.43,65,0.15,0.04568
+Spider,stay_side,condition,-1.58,28,0.11,0.06743
+Spider,tunnel,leq,-0.39,269,0.7,0.5908
+Spider,tunnel,age1,-0.39,269,0.694,0.5908
+Spider,tunnel,age2,2.04,269,0.041,0.5908
+Spider,tunnel,leqxage1,1.65,269,0.1,0.5908
+Spider,tunnel,leqxage2,-1.48,269,0.139,0.5908
+Spider,side,leq,0.3,244,0.761,0.6549
+Spider,side,age,-0.36,244,0.718,0.6549
+Spider,side,leqxage,-1.75,244,0.081,0.6549
+Silk,,,,,,
