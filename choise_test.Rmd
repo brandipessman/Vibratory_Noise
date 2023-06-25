@@ -302,7 +302,8 @@ ggplot() +
 
 choice_scaled <- choice %>% 
   mutate(Age = c(scale(Age)),
-         condition = c(scale(condition)))
+         condition = c(scale(condition)),
+         mean_leq = c(scale(mean_leq)))
 age_cond <- lm(Age ~ condition, data = choice_scaled)
 summary(age_cond)
 
@@ -1752,6 +1753,207 @@ summary(lq_5a) # no diff
 
 There is a trend by age in the loud site. 
 
+
+## Choice Photos
+
+```{r choice photos, echo = FALSE, message = FALSE, warning = FALSE}
+photos <- read.csv("data/choice_photos.csv", header = TRUE)
+
+photos_seen <- photos %>% 
+  mutate(prop = night_loud / (night_loud + night_quiet)) %>% 
+  pivot_longer(cols = c(night_unseen, night_seen), values_to = "photos", names_to = "seen") %>% 
+  mutate(seen = fct_recode(seen, "Yes" = "night_seen", "No" = "night_unseen"),
+         seen = fct_relevel(seen, "No", "Yes"))
+
+seen <- ggplot() +
+  geom_bar(aes(y = reorder(ID, prop), x = photos, fill = seen), data = photos_seen, position = "fill", stat = "identity") +
+  ylab("Spider ID") +
+  xlab("Proportion of \nNight Photos") +
+  scale_fill_manual("", values = c("grey", "#7570b3"), labels = c("Unseen", "Visible")) +
+  guides(fill = guide_legend(reverse = TRUE)) +
+  th +
+  theme(legend.position = "top") +
+  facet_grid(rows = vars(Site), scales = "free", space = 'free', switch = "y")
+
+photos_side <- photos %>% 
+  mutate(prop = night_loud / (night_loud + night_quiet)) %>% 
+  pivot_longer(cols = c(night_loud, night_quiet), values_to = "photos", names_to = "side") %>% 
+  mutate(side = fct_recode(side, "Loud" = "night_loud", "Quiet" = "night_quiet"),
+         side = fct_relevel(side, "Quiet", "Loud"))
+
+side <- ggplot() +
+  geom_bar(aes(y = reorder(ID, prop), x = photos, fill = side), data = photos_side, position = "fill", stat = "identity") +
+  geom_vline(xintercept = 0.5, linetype = "dashed") +
+  ylab("Spider ID") +
+  xlab("Proportion of Night \nPhotos with Spider Visible") +
+  scale_fill_manual("", values = c("#1b9e77", "#d95f02"), labels = c("Quiet", "Loud")) +
+  guides(fill = guide_legend(reverse = TRUE)) +
+  th +
+  theme(legend.position = "top") +
+  theme(axis.text.y = element_blank(),
+        axis.title.y = element_blank()) +
+  facet_grid(rows = vars(Site), scales = "free", space = 'free', switch = "y")
+
+photos_night <- ggarrange(seen, side, ncol = 2, widths = c(0.55, 0.45))
+
+jpeg("figures/photos_night.jpeg", width = 5, height = 6, units = "in", quality = 100, res = 300)
+print(photos_night)
+dev.off()
+photos_night
+
+activity <- photos %>% 
+  pivot_longer(cols = c("X20.30":"X20.00"), values_to = "active", names_to = "hour") %>% 
+  mutate(hour = fct_recode(hour, 
+                           "20.5" = "X20.30",
+                           "21.5" = "X21.30",
+                           "22.5" = "X22.30",
+                           "23.5" = "X23.30",
+                           "0.5" = "X00.30",
+                           "1.5" = "X01.30",
+                           "2.5" = "X02.30",
+                           "3.5" = "X03.30",
+                           "4.5" = "X04.30",
+                           "5.5" = "X05.30",
+                           "6.5" = "X06.30",
+                           "7.5" = "X07.30",
+                           "8.5" = "X08.30",
+                           "9.5" = "X09.30",
+                           "10.5" = "X10.30",
+                           "11.5" = "X11.30",
+                           "12.5" = "X12.30",
+                           "13.5" = "X13.30",
+                           "14.5" = "X14.30",
+                           "15.5" = "X15.30",
+                           "16.5" = "X16.30",
+                           "17.5" = "X17.30",
+                           "18.5" = "X18.30",
+                           "19.5" = "X19.30",
+                           "21" = "X21.00",
+                           "22" = "X22.00",
+                           "23" = "X23.00",
+                           "0" = "X00.00",
+                           "1" = "X01.00",
+                           "2" = "X02.00",
+                           "3" = "X03.00",
+                           "4" = "X04.00",
+                           "5" = "X05.00",
+                           "6" = "X06.00",
+                           "7" = "X07.00",
+                           "8" = "X08.00",
+                           "9" = "X09.00",
+                           "10" = "X10.00",
+                           "11" = "X11.00",
+                           "12" = "X12.00",
+                           "13" = "X13.00",
+                           "14" = "X14.00",
+                           "15" = "X15.00",
+                           "16" = "X16.00",
+                           "17" = "X17.00",
+                           "18" = "X18.00",
+                           "19" = "X19.00",
+                           "20" = "X20.00"
+                           )) %>% 
+  mutate(hour = as.character(hour),
+         hour = as.numeric(hour)) %>% 
+  group_by(hour, Origin) %>% 
+  summarize(mean = mean(active, na.rm = TRUE)) %>% 
+  pivot_wider(names_from = "Origin", values_from = "mean")
+
+ggplot() +
+  geom_line(aes(x = hour, y = Loud, group = 1), color = "#d95f02", data = activity) +
+  geom_line(aes(x = hour, y = Quiet, group = 1), color = "#1b9e77", data = activity) +
+  geom_area(aes(x = hour, y = Loud, group = 1), fill = "#d95f02", data = activity, alpha = 0.5) +
+  geom_area(aes(x = hour, y = Quiet, group = 1), fill = "#1b9e77", data = activity, alpha = 0.5) +
+  scale_x_continuous(limits = c(0, 24), breaks = seq(0, 24, 2)) +
+  th
+
+
+activity_hours <- photos %>% 
+  mutate(X21 = X21.00 + X21.30,
+         X22 = X22.00 + X22.30,
+         X23 = X23.00 + X23.30,
+         X00 = X00.00 + X00.30,
+         X01 = X01.00 + X01.30,
+         X02 = X02.00 + X02.30,
+         X03 = X03.00 + X03.30,
+         X04 = X04.00 + X04.30,
+         X05 = X05.00 + X05.30,
+         X06 = X06.00 + X06.30,
+         X07 = X07.00 + X07.30,
+         X08 = X08.00 + X08.30,
+         X09 = X09.00 + X09.30,
+         X10 = X10.00 + X10.30,
+         X11 = X11.00 + X11.30,
+         X12 = X12.00 + X12.30,
+         X13 = X13.00 + X13.30,
+         X14 = X14.00 + X14.30,
+         X15 = X15.00 + X15.30,
+         X16 = X16.00 + X16.30,
+         X17 = X17.00 + X17.30,
+         X18 = X18.00 + X18.30,
+         X19 = X19.00 + X19.30,
+         X20 = X20.00 + X20.30) %>% 
+  pivot_longer(cols = c("X20":"X21"), values_to = "active", names_to = "hour") %>% 
+  mutate(hour = fct_recode(hour, 
+                           "20" = "X20",
+                           "21" = "X21",
+                           "22" = "X22",
+                           "23" = "X23",
+                           "0" = "X00",
+                           "1" = "X01",
+                           "2" = "X02",
+                           "3" = "X03",
+                           "4" = "X04",
+                           "5" = "X05",
+                           "6" = "X06",
+                           "7" = "X07",
+                           "8" = "X08",
+                           "9" = "X09",
+                           "10" = "X10",
+                           "11" = "X11",
+                           "12" = "X12",
+                           "13" = "X13",
+                           "14" = "X14",
+                           "15" = "X15",
+                           "16" = "X16",
+                           "17" = "X17",
+                           "18" = "X18",
+                           "19" = "X19",
+                           "20" = "X20"
+                           )) %>% 
+  mutate(hour = as.character(hour),
+         hour = as.numeric(hour)) %>% 
+  group_by(hour, Origin) %>% 
+  summarize(mean = mean(active, na.rm = TRUE)) %>% 
+  pivot_wider(names_from = "Origin", values_from = "mean")
+
+colors <- c("Urban" = "#d95f02", "Rural" = "#1b9e77")
+
+activity_graph <- ggplot() +
+  geom_rect(aes(xmin = 0, xmax = 8, ymin = 0, ymax = 11), fill = "grey") +
+  geom_rect(aes(xmin = 20, xmax = 23, ymin = 0, ymax = 11), fill = "grey") +
+  geom_line(aes(x = hour, y = Loud, group = 1), color = "#d95f02", data = activity_hours) +
+  geom_line(aes(x = hour, y = Quiet, group = 1), color = "#1b9e77", data = activity_hours) +
+  geom_area(aes(x = hour, y = Loud, group = 1, fill = "Urban"), data = activity_hours, alpha = 0.5) +
+  geom_area(aes(x = hour, y = Quiet, group = 1, fill = "Rural"), data = activity_hours, alpha = 0.5) +
+  xlab("Hour of the Day") +
+  ylab("Average Number of Photos \nwith Position Change") +
+  scale_x_continuous(limits = c(0, 23), breaks = seq(0, 23, 2), expand = c(0,0)) +
+  scale_y_continuous(limits = c(0, 11), breaks = seq(0, 10, 2), expand = c(0,0)) +
+  scale_fill_manual("Origin", values = c("Urban" = "#d95f02", "Rural" = "#1b9e77")) +
+  guides(fill = guide_legend(reverse = TRUE)) +
+  th +
+  theme(legend.position = "top")
+
+jpeg("figures/activity_graph.jpeg", width = 5, height = 3, units = "in", quality = 100, res = 300)
+print(activity_graph)
+dev.off()
+activity_graph
+```
+
+
+# Silk Side
+
 ## Side with More Silk
 
 **tl;dr:** We used a logistic regression (binomial GLM) to determine the probability of spiders building webs on the loud (1) or quiet (0) side. We scaled and centered mean_leq, condition and age, but back transformed for graphs. Body condition was removed during backward selection. The likelihood of choosing one side over another did not vary by site Leq or age. However, an interaction between Leq and age suggests that the young spiders showed increasing choice for loud with origin Leq but older spiders did not exhibit a choice. Only the loudest site (8B) spiders had a majority choose a particular side (significant difference from 50%).
@@ -1761,7 +1963,7 @@ The first thing we want to do is assess the number of spiders that "chose" (put 
 ```{r summary of side choice, echo = FALSE, warning = FALSE, message = FALSE}
 choice %>% 
   # group by all the different ways we can use site
-  group_by(Site_cat, mean_leq, Origin) %>% 
+  group_by(Site, mean_leq, Origin) %>% 
   # count the number of loud and quiet choices
   count(side_w_more) %>% 
   pivot_wider(names_from = "side_w_more", values_from = "n") %>% 
@@ -1781,62 +1983,194 @@ Choice can be also be assessed in a number of ways:
 
 We will make choice **binary** with 1's entered for loud choice and 0 entered for quiet choice. We can include age (days since maturation) and body condition (residuals of lm of log mass and log cephalothorax width). We will scale and center all of the predictor variables first.
 
-Let's first look at the site average leq. We are interested in the effect of the **site average Leq** (mean_leq) of the site the spider was collected from on their "choice" of vibratory environment (loud or quiet). For this analysis, we have coded a **loud choice as 1 and a quiet choice as 0** (side). Because **age** (days since maturation) and **condition** (residuals of lm of log mass and log cephalothorax width) of the spider might affect its choice, we include their interaction with leq. We performed backward selection, which left an interaction between leq and age. 
+Let's look at the shape of the raw data.
+
+```{r silk loud quiet exploration, echo = FALSE, message = FALSE, warning = FALSE}
+mean_leq_raw <- choice %>% 
+  group_by(mean_leq, side) %>% 
+  count() %>% 
+  mutate(side = factor(side),
+         side = fct_relevel(side, "0", "1")) %>% 
+ggplot() +
+  geom_bar(aes(x = mean_leq, y = n, fill = side), position="fill", stat="identity") +
+  geom_hline(yintercept = 0.5, linetype = 2) +
+  ylab("Proportion of Spiders") +
+  scale_fill_manual("", 
+                    values = c("#d95f02", "#1b9e77"),
+                    labels = c("Loud", "Quiet")) +
+  th +
+  theme(legend.position = "top")
+
+Age_raw <- choice %>% 
+  ggplot() +
+  geom_point(aes(x = Age, y = side, color = factor(mean_leq))) +
+  geom_smooth(aes(x = Age, y = side), color = "black") +
+  theme(legend.position = "top")
+
+condition_raw <- choice %>% 
+  ggplot() +
+  geom_point(aes(x = condition, y = side, color = factor(mean_leq))) +
+  geom_smooth(aes(x = condition, y = side), color = "black") +
+  theme(legend.position = "top")
+
+ggarrange(Age_raw, condition_raw, mean_leq_raw, nrow = 2, ncol = 2)
+```
+
+We may need to use polynomials for age and condition.
+
+Let's find the best fit model. 
 
 ```{r binomial stats, echo = FALSE, warning = FALSE, message = FALSE}
 binom_leq <- glm(side ~ mean_leq * Age + mean_leq * condition, 
                  data = choice_scaled, family = binomial(link = "logit"))
-#drop1(binom_leq, test = "Chisq")
-binom_leq2 <- update(binom_leq, .~. -mean_leq:condition)
-#drop1(binom_leq2, test = "Chisq")
-binom_leq3 <- update(binom_leq2, .~. -condition)
-#drop1(binom_leq3, test = "Chisq")
-kable(coef(summary(binom_leq3)), digits = 3)
-#simulateResiduals(binom_leq3, plot = TRUE) # dispersion test
+binom_leq2 <- glm(side ~ mean_leq * poly(Age, 2) + mean_leq * poly(condition, 2), 
+                 data = choice_scaled, family = binomial(link = "logit"))
+anova(binom_leq, binom_leq2, test = "Chisq") # both polys better
+binom_leq3 <- glm(side ~ mean_leq * poly(Age, 2) + mean_leq * condition, 
+                 data = choice_scaled, family = binomial(link = "logit"))
+anova(binom_leq2, binom_leq3, test = "Chisq") # both polys better
+binom_leq4 <- glm(side ~ mean_leq * Age + mean_leq * poly(condition, 2), 
+                 data = choice_scaled, family = binomial(link = "logit"))
+anova(binom_leq2, binom_leq4, test = "Chisq") # both polys better
+
+
+binom_leq <- glm(side ~ mean_leq * poly(Age, 2) + mean_leq * poly(condition, 2), 
+                 data = choice_scaled, family = binomial(link = "logit"))
+binom_leq <- step(binom_leq)
+summary(binom_leq)
+with(summary(binom_leq), 1 - deviance/null.deviance)
+#simulateResiduals(binom_leq, plot = TRUE) # dispersion test
+
+plot(hatvalues(binom_leq), type = 'h')
+
+model.data <- augment(binom_leq) %>% 
+  mutate(index = 1:n()) 
+model.data %>% 
+  filter(abs(.std.resid) > 3)
+#no outliers
+
+vif(binom_leq)
+# not terrible
+
+# similar results without polynomials
+binom_leq <- glm(side ~ mean_leq * Age + mean_leq * condition, 
+                 data = choice_scaled, family = binomial(link = "logit"))
+binom_leq <- step(binom_leq)
+summary(binom_leq)
+with(summary(binom_leq), 1 - deviance/null.deviance)
+vif(binom_leq)
 ```
 
-There is no overall effect of site average Leq on the likelihood of choosing loud or quiet (z = `r round(coef(summary(binom_leq3))[2, 3], 2)`, df = `r binom_leq3$df.resid`, P `r ifelse(round(coef(summary(binom_leq3))[2,4], 3) == 0, print("< 0.001"), print(paste("=", round(coef(summary(binom_leq3))[2,4], 3))))`). 
+We get similar results with and without age and condition as polynomials. The only significant relationship is a linear interaction between age and leq. 
 
-There is no overall effect of age on the likelihood of choosing loud or quiet (z = `r round(coef(summary(binom_leq3))[3, 3], 2)`, df = `r binom_leq3$df.resid`, P `r ifelse(round(coef(summary(binom_leq3))[3,4], 3) == 0, print("< 0.001"), print(paste("=", round(coef(summary(binom_leq3))[3,4], 3))))`). 
+Let's graph it. 
 
-There is a trend of an interaction between site leq and age; specifically, younger spiders showed increasing preference for loud vibratory environments as origin leq increased, but older spiders show no preference (z = `r round(coef(summary(binom_leq3))[4, 3], 2)`, df = `r binom_leq3$df.resid`, P `r ifelse(round(coef(summary(binom_leq3))[4,4], 3) == 0, print("< 0.001"), print(paste("=", round(coef(summary(binom_leq3))[4,4], 3))))`).
+```{r binomial leq graph, echo = FALSE,  warning = FALSE, message = FALSE, results = 'hide'}
+# leq age interaction
+stacked <- choice %>% 
+  # let's use above and below the median age, labeling them as 15 and 32 just makes faceting easier later
+  mutate(Age = ifelse(Age < median(Age), 15, 32)) %>% 
+  group_by(mean_leq, Age) %>% 
+  count(side_w_more) %>% 
+  mutate(side_w_more = fct_relevel(side_w_more, "quiet", "loud")) 
+
+labs <- c("Bars: Proportion < Median Age \nLine: Predictions at 1st Quartile Age",
+          "Bars: Proportion >= Median Age \nLine: Predictions at 3rd Quartile Age")
+names(labs) <- c("15", "32")
+
+nd = expand.grid(mean_leq = seq(-1, 1.4, 0.02),
+                Age = quantile(choice_scaled$Age, probs = c(0.25, 0.75)))
+nd <- add_column(nd, fit = predict(binom_leq, newdata = nd, type = "response"),
+                 se = predict(binom_leq, newdata = nd, se.fit = TRUE, type = "response")$se.fit)
+# back transform
+nd$mean_leq = nd$mean_leq * sd(choice$mean_leq) + mean(choice$mean_leq)
+nd$Age = nd$Age * sd(choice$Age) + mean(choice$Age)
+
+num_leq <- ggplot() +
+  geom_bar(aes(fill=side_w_more, y=n, x=mean_leq), position="fill", stat="identity", data = stacked, alpha = 0.75) +
+  geom_hline(yintercept = 0.5, linetype = 2) +
+  geom_line(aes(x = mean_leq, y = fit, group = factor(Age)), data = nd) +
+  geom_ribbon(aes(x = mean_leq, ymin = fit - se, ymax = fit + se, group = factor(Age)), data = nd, alpha = 0.5) +
+  scale_x_continuous(breaks = c(-69, -64, -55)) +
+  scale_fill_manual("Side with \nMore Silk", 
+                    values = c("#1B9E77", "#D95F02"),
+                    labels = c("Quiet", "Loud")) +
+  xlab("Site Average Leq (dB, 20-1000 Hz)") +
+  ylab("Proportion of Spiders") +
+  th +
+  facet_wrap(~Age, labeller = labeller(Age = labs))
+
+jpeg("figures/num_leq.jpeg", width = 6.5, height = 4, units = "in", quality = 100, res = 300)
+print(num_leq)
+dev.off()
+num_leq
+
+# another way to view
+nd = expand.grid(mean_leq = quantile(choice_scaled$mean_leq, probs = c(0, 0.5, 1)),
+                Age = seq(-2.5, 2.5, 0.2))
+nd <- add_column(nd, fit = predict(binom_leq, newdata = nd, type = "response"),
+                 se = predict(binom_leq, newdata = nd, type = "response", se.fit = TRUE)$se.fit)
+# back transform
+nd$Age = nd$Age * sd(choice$Age) + mean(choice$Age)
+nd$mean_leq = round(nd$mean_leq * sd(choice$mean_leq) + mean(choice$mean_leq), 0)
+
+nd %>% 
+ggplot(aes(x = Age, y = fit, group = factor(mean_leq), color = factor(mean_leq), fill = factor(mean_leq))) +
+  geom_hline(yintercept = 0.5, linetype = 2) +
+  geom_line() +
+  geom_ribbon(aes(ymin = fit - se, ymax = fit + se), alpha = 0.5) +
+  ylab("Proportion of Spiders") +
+  xlab("Age (days since maturation)") +
+  scale_y_continuous(limits = c(-0.05, 1.05), breaks = c(0, 0.25, 0.5, 0.75, 1)) +
+  scale_fill_manual("Site Average Leq", 
+                    values = c("#1B9E77", "grey20", "#D95F02"),
+                    labels = c("-69", "-64", "-55")) +
+  scale_color_manual("Site Average Leq", 
+                    values = c("#1B9E77", "grey20", "#D95F02"),
+                    labels = c("-69", "-64", "-55")) +
+  th
+```
 
 Let's test each site separately to test the null hypothesis that there is not a majority of spiders choosing one side or the other (50%). Let's test the models with and without age and choose the best fit model.
 
 ```{r binomial site difference, echo = FALSE, warning = FALSE, message = FALSE}
-choice_8B <- choice %>% 
-  filter(Site_cat == "8B")
-binom_8B <- glm(side ~ 1, data = choice_8B, family = binomial(link = 'logit'))
-binom_8B2 <- glm(side ~ Age, data = choice_8B, family = binomial(link = 'logit'))
-#anova(binom_8B, binom_8B2, test = "Chi") # let's keep age
-coef_binom_8B <- round(data.frame(coef(summary(binom_8B2))), 3) %>% 
+choice_8B_scaled <- choice_8B %>% 
+  mutate(Age = c(scale(Age)),
+         condition = c(scale(condition)))
+binom_8B <- glm(side ~ Age + condition, data = choice_8B_scaled, family = binomial(link = 'logit'))
+binom_8B <- step(binom_8B)
+
+coef_binom_8B <- round(data.frame(coef(summary(binom_8B))), 3) %>% 
   mutate(Site = "8B",
          Leq = -55)
   
-choice_8A <- choice %>% 
-  filter(Site_cat == "8A")
-binom_8A <- glm(side ~ 1, data = choice_8A, family = binomial(link = 'logit'))
-binom_8A2 <- glm(side ~ Age, data = choice_8A, family = binomial(link = 'logit'))
-#anova(binom_8A, binom_8A, test = "Chi") # without age best
+choice_8A_scaled <- choice_8A %>% 
+  mutate(Age = c(scale(Age)),
+         condition = c(scale(condition)))
+binom_8A <- glm(side ~ Age + condition, data = choice_8A_scaled, family = binomial(link = 'logit'))
+binom_8A <- step(binom_8A)
+
 coef_binom_8A <- round(data.frame(coef(summary(binom_8A))), 3) %>% 
   mutate(Site = "8A",
          Leq = -64)
 
-choice_6C <- choice %>% 
-  filter(Site_cat == "6C")
-binom_6C <- glm(side ~ 1, data = choice_6C, family = binomial(link = 'logit'))
-binom_6C2 <- glm(side ~ Age, data = choice_6C, family = binomial(link = 'logit'))
-#anova(binom_6C, binom_6C2, test = "Chi") # without age better
+choice_6C_scaled <- choice_6C %>% 
+  mutate(Age = c(scale(Age)),
+         condition = c(scale(condition)))
+binom_6C <- glm(side ~ Age + condition, data = choice_6C_scaled, family = binomial(link = 'logit'))
+binom_6C <- step(binom_6C)
+
 coef_binom_6C <- round(data.frame(coef(summary(binom_6C))), 3) %>% 
   mutate(Site = "6C",
          Leq = -69)
 
-choice_5A <- choice %>% 
-  filter(Site_cat == "5A")
-binom_5A <- glm(side ~ 1, data = choice_5A, family = binomial(link = 'logit'))
-binom_5A2 <- glm(side ~ Age, data = choice_5A, family = binomial(link = 'logit'))
-#anova(binom_5A, binom_5A2, test = "Chi") # let's keep age
-coef_binom_5A <- round(data.frame(coef(summary(binom_5A2))), 3) %>% 
+choice_5A_scaled <- choice_5A %>% 
+  mutate(Age = c(scale(Age)),
+         condition = c(scale(condition)))
+binom_5A <- glm(side ~ Age + condition, data = choice_5A_scaled, family = binomial(link = 'logit'))
+binom_5A <- step(binom_5A)
+
+coef_binom_5A <- round(data.frame(coef(summary(binom_5A))), 3) %>% 
   mutate(Site = "5A",
          Leq = -69)
 
@@ -1951,7 +2285,7 @@ This looks pretty good.
 **Assumption 2: no outliers**
 
 ```{r binomial assumption 2, echo = FALSE,  warning = FALSE, message = FALSE}
-model.data <- augment(binom_leq3) %>% 
+model.data <- augment(binom_leq) %>% 
   mutate(index = 1:n()) 
 model.data %>% 
   filter(abs(.std.resid) > 3)
@@ -1962,163 +2296,17 @@ No outliers.
 **Assumption 3: no multicollinearity**
 
 ```{r binomial assumption 3, echo = FALSE,  warning = FALSE, message = FALSE}
-vif(binom_leq3)
+vif(binom_leq)
 ```
 
 No highly correlated. Let's graph the results:
 
-```{r binomial leq graph, echo = FALSE,  warning = FALSE, message = FALSE, results = 'hide'}
-# leq effect
-binom_leq3$call
-stacked <- choice %>% 
-  # let's use above and below the median age, labeling them as 15 and 32 just makes faceting easier later
-  group_by(mean_leq) %>% 
-  count(side_w_more) %>% 
-  mutate(side_w_more = fct_relevel(side_w_more, "quiet", "loud")) 
-
-pred_leq <- data.frame(Effect("mean_leq", binom_leq3, residuals = TRUE))
-# back transform
-pred_leq$mean_leq = pred_leq$mean_leq * sd(choice$mean_leq) + mean(choice$mean_leq)
-
-leq <- ggplot() +
-  geom_bar(aes(fill = side_w_more, y = n, x = mean_leq), position="fill", stat="identity", data = stacked, alpha = 0.75) +
-  geom_hline(yintercept = 0.5, linetype = 2) +
-  geom_line(aes(x = mean_leq, y = fit), data = pred_leq) +
-  geom_ribbon(aes(x = mean_leq, ymin = fit - (se * 1.96), ymax = fit + (se * 1.96)), data = pred_leq, alpha = 0.5) +
-  scale_x_continuous(breaks = c(-69, -64, -55)) +
-  scale_fill_manual("Side with \nMore Silk", 
-                    values = c("#1B9E77", "#D95F02"),
-                    labels = c("Quiet", "Loud")) +
-  xlab("Site Average Leq (dB, 20-1000 Hz)") +
-  ylab("Proportion of Spiders") +
-  ggtitle("Leq Effect") +
-  th
-
-# Age effect
-stacked <- choice %>% 
-  # let's use above and below the median age, labeling them as 15 and 32 just makes faceting easier later
-  mutate(quant_Age = ifelse(Age < quantile(Age, 0.25), quantile(Age, 0.25),
-                            ifelse (Age >= quantile(Age, 0.25) & Age < quantile(Age, 0.5), quantile(Age, 0.5),
-                                    ifelse(Age >= quantile(Age, 0.5) & Age < quantile(Age, 0.75), quantile(Age, 0.75), quantile(Age, 1))))) %>% 
-  group_by(quant_Age) %>% 
-  count(side_w_more) %>% 
-  mutate(side_w_more = fct_relevel(side_w_more, "quiet", "loud")) 
-
-pred_age <- data.frame(Effect("Age", binom_leq3, residuals = TRUE))
-# back transform
-pred_age$Age = pred_age$Age * sd(choice$Age) + mean(choice$Age)
-
-age <- ggplot() +
-  geom_bar(aes(fill=side_w_more, y = n, x = quant_Age), position="fill", stat="identity", data = stacked, alpha = 0.75) +
-  geom_hline(yintercept = 0.5, linetype = 2) +
-  geom_line(aes(x = Age, y = fit), data = pred_age) +
-  geom_ribbon(aes(x = Age, ymin = fit - (se * 1.96), ymax = fit + (se * 1.96)), data = pred_age, alpha = 0.5) +
-  scale_x_continuous(breaks = c(0, 15, 26, 32, 48)) +
-  scale_fill_manual("Side with \nMore Silk", 
-                    values = c("#1B9E77", "#D95F02"),
-                    labels = c("Quiet", "Loud")) +
-  xlab("Age (days)") +
-  ylab("Proportion of Spiders") +
-  ggtitle("Age Effect") +
-  th
-
-ggarrange(leq, age, labels = c("A", "B"), common.legend = TRUE)
-
-# leq age interaction
-stacked <- choice %>% 
-  # let's use above and below the median age, labeling them as 15 and 32 just makes faceting easier later
-  mutate(Age = ifelse(Age < median(Age), 15, 32)) %>% 
-  group_by(mean_leq, Age) %>% 
-  count(side_w_more) %>% 
-  mutate(side_w_more = fct_relevel(side_w_more, "quiet", "loud")) 
-
-labs <- c("Bars: Proportion < Median Age \nLine: Predictions at 1st Quartile Age",
-          "Bars: Proportion >= Median Age \nLine: Predictions at 3rd Quartile Age")
-names(labs) <- c("15", "32")
-
-nd = expand.grid(mean_leq = seq(-1, 1.4, 0.02),
-                Age = quantile(choice_scaled$Age, probs = c(0.25, 0.75)))
-nd <- add_column(nd, fit = predict(binom_leq3, newdata = nd, type = "response"),
-                 se = predict(binom_leq3, newdata = nd, se.fit = TRUE, type = "response")$se.fit)
-# back transform
-nd$mean_leq = nd$mean_leq * sd(choice$mean_leq) + mean(choice$mean_leq)
-nd$Age = nd$Age * sd(choice$Age) + mean(choice$Age)
-
-num_leq <- ggplot() +
-  geom_bar(aes(fill=side_w_more, y=n, x=mean_leq), position="fill", stat="identity", data = stacked, alpha = 0.75) +
-  geom_hline(yintercept = 0.5, linetype = 2) +
-  geom_line(aes(x = mean_leq, y = fit, group = factor(Age)), data = nd) +
-  geom_ribbon(aes(x = mean_leq, ymin = fit - (se * 1.96), ymax = fit + (se * 1.96), group = factor(Age)), data = nd, alpha = 0.5) +
-  scale_x_continuous(breaks = c(-69, -64, -55)) +
-  scale_fill_manual("Side with \nMore Silk", 
-                    values = c("#1B9E77", "#D95F02"),
-                    labels = c("Quiet", "Loud")) +
-  xlab("Site Average Leq (dB, 20-1000 Hz)") +
-  ylab("Proportion of Spiders") +
-  th +
-  facet_wrap(~Age, labeller = labeller(Age = labs))
-
-jpeg("figures/num_leq.jpeg", width = 6.5, height = 4, units = "in", quality = 100, res = 300)
-print(num_leq)
-dev.off()
-num_leq
-
-# another way to view
-nd = expand.grid(mean_leq = c(-0.8889257, -0.1045795, 1.3072437),
-                Age = seq(-2.5, 2.5, 0.2))
-nd <- add_column(nd, fit = predict(binom_leq3, newdata = nd, type = "response"),
-                 se = predict(binom_leq3, newdata = nd, type = "response", se.fit = TRUE)$se.fit)
-# back transform
-nd$Age = nd$Age * sd(choice$Age) + mean(choice$Age)
-nd$mean_leq = round(nd$mean_leq * sd(choice$mean_leq) + mean(choice$mean_leq), 0)
-
-nd %>% 
-ggplot(aes(x = Age, y = fit, group = factor(mean_leq), color = factor(mean_leq), fill = factor(mean_leq))) +
-  geom_hline(yintercept = 0.5, linetype = 2) +
-  geom_line() +
-  geom_ribbon(aes(ymin = fit - (se * 1.96), ymax = fit + (se * 1.96)), alpha = 0.5) +
-  ylab("Proportion of Spiders") +
-  xlab("Age (days since maturation)") +
-  scale_y_continuous(limits = c(-0.25, 1.1), breaks = c(-0.25, 0, 0.25, 0.5, 0.75, 1)) +
-  scale_fill_manual("Site Average Leq", 
-                    values = c("#1B9E77", "grey20", "#D95F02"),
-                    labels = c("-69", "-64", "-55")) +
-  scale_color_manual("Site Average Leq", 
-                    values = c("#1B9E77", "grey20", "#D95F02"),
-                    labels = c("-69", "-64", "-55")) +
-  th +
-  facet_wrap(~ mean_leq)
-
-# origin for funsies
-nd = expand.grid(Origin = levels(factor(choice$Origin)),
-                Age = seq(-2.5, 2.5, 0.2))
-nd <- add_column(nd, fit = predict(binom_org3, newdata = nd, type = "response"),
-                 se = predict(binom_org3, newdata = nd, type = "response", se.fit = TRUE)$se.fit)
-# back transform
-nd$Age = nd$Age * sd(choice$Age) + mean(choice$Age)
-
-nd %>% 
-ggplot(aes(x = Age, y = fit, group = Origin, color = Origin, fill = Origin)) +
-  geom_hline(yintercept = 0.5, linetype = 2) +
-  geom_line() +
-  geom_ribbon(aes(ymin = fit - (se * 1.96), ymax = fit + (se * 1.96)), alpha = 0.5) +
-  ylab("Proportion of Spiders") +
-  xlab("Age (days since maturation)") +
-  scale_y_continuous(limits = c(-0.2, 1.1), breaks = c(0, 0.25, 0.5, 0.75, 1)) +
-  scale_fill_manual("Category", 
-                    values = c("#1B9E77", "#D95F02"),
-                    labels = c("Rural", "Urban")) +
-  scale_color_manual("Category", 
-                    values = c("#1B9E77", "#D95F02"),
-                    labels = c("Rural", "Urban")) +
-  th
-```
-
 ```{r binomial site graph, echo = FALSE,  warning = FALSE, message = FALSE, results = 'hide'}
 # no age
+binom_8B2 <- glm(side ~ 1, data = choice_8B_scaled, family = binomial(link = 'logit'))
 pred_8B = expand.grid(Site = "8B")
-pred_8B <- add_column(pred_8B, fit = predict(binom_8B, type = "response", newdata = pred_8B),
-                      se = predict(binom_8B, type = "response", newdata = pred_8B, se.fit = TRUE)$se.fit)
+pred_8B <- add_column(pred_8B, fit = predict(binom_8B2, type = "response", newdata = pred_8B),
+                      se = predict(binom_8B2, type = "response", newdata = pred_8B, se.fit = TRUE)$se.fit)
 
 pred_8A = expand.grid(Site = "8A")
 pred_8A <- add_column(pred_8A, fit = predict(binom_8A, type = "response", newdata = pred_8A),
@@ -2128,27 +2316,28 @@ pred_6C = expand.grid(Site = "6C")
 pred_6C <- add_column(pred_6C, fit = predict(binom_6C, type = "response", newdata = pred_6C),
                       se = predict(binom_6C, type = "response", newdata = pred_6C, se.fit = TRUE)$se.fit)
 
+binom_5A2 <- glm(side ~ 1, data = choice_5A_scaled, family = binomial(link = 'logit'))
 pred_5A = expand.grid(Site = "5A")
-pred_5A <- add_column(pred_5A, fit = predict(binom_5A, type = "response", newdata = pred_5A),
-                      se = predict(binom_5A, type = "response", newdata = pred_5A, se.fit = TRUE)$se.fit)
+pred_5A <- add_column(pred_5A, fit = predict(binom_5A2, type = "response", newdata = pred_5A),
+                      se = predict(binom_5A2, type = "response", newdata = pred_5A, se.fit = TRUE)$se.fit)
 
 pred_noage <- rbind(pred_8B, pred_8A, pred_6C, pred_5A)
 
 stacked_noage <- choice %>% 
-  group_by(Site_cat) %>% 
+  group_by(Site) %>% 
   count(side_w_more) %>% 
   mutate(side_w_more = fct_relevel(side_w_more, "quiet", "loud")) 
 
 nval_noage <- choice %>% 
-  group_by(Site_cat) %>% 
+  group_by(Site) %>% 
   count() 
 
 binom_noage <- ggplot() +
-  geom_bar(aes(fill = side_w_more, y = n, x = Site_cat), position="fill", stat="identity", data = stacked_noage, alpha = 0.75) +
+  geom_bar(aes(fill = side_w_more, y = n, x = Site), position="fill", stat="identity", data = stacked_noage, alpha = 0.75) +
   geom_hline(yintercept = 0.5, linetype = 2) +
   geom_point(aes(x = Site, y = fit), data = pred_noage, size = 1.5) +
   geom_errorbar(aes(x = Site, ymin = fit - se, ymax = fit + se), data = pred_noage, width = 0.15) +
-  geom_text(aes(x = Site_cat, y = 1.05, label = paste("n = ", n)), data = nval_noage, size = 3) +
+  geom_text(aes(x = Site, y = 1.05, label = paste("n = ", n)), data = nval_noage, size = 3) +
   scale_x_discrete(labels = c("5A" = "5A \n(-69)", "6C" = "6C \n(-69)", "8A" = "8A \n(-64)", "8B" = "8B \n(-55)")) +
   scale_fill_manual("Side with \nMore Silk", 
                     values = c("#1B9E77", "#D95F02"),
@@ -2160,14 +2349,16 @@ binom_noage <- ggplot() +
 
 # age
 pred_8B = expand.grid(Site = "8B",
-                Age = seq(0, 50, 1)) 
-pred_8B <- add_column(pred_8B, fit = predict(binom_8B2, type = "response", newdata = pred_8B),
-                      se = predict(binom_8B2, type = "response", newdata = pred_8B, se.fit = TRUE)$se.fit)
+                Age = seq(-2.5, 2.5, 0.05)) 
+pred_8B <- add_column(pred_8B, fit = predict(binom_8B, type = "response", newdata = pred_8B),
+                      se = predict(binom_8B, type = "response", newdata = pred_8B, se.fit = TRUE)$se.fit)
 
 pred_5A = expand.grid(Site = "5A",
-                Age = seq(0, 50, 1)) 
-pred_5A <- add_column(pred_5A, fit = predict(binom_5A2, type = "response", newdata = pred_5A),
-                      se = predict(binom_5A2, type = "response", newdata = pred_5A, se.fit = TRUE)$se.fit)
+                Age = seq(-2.5, 2.5, 0.05)) 
+pred_5A <- add_column(pred_5A, fit = predict(binom_5A, type = "response", newdata = pred_5A),
+                      se = predict(binom_5A, type = "response", newdata = pred_5A, se.fit = TRUE)$se.fit)
+
+pred_8B$Age = pred_8B$Age * sd(choice$Age) + mean(choice$Age)
 
 binom_age_8B <- ggplot() +
   geom_rect(aes(xmin = -Inf, xmax = Inf, ymin = 0.5, ymax = 1.2), fill = "#D95F02", alpha = 0.5) +
@@ -2181,6 +2372,8 @@ binom_age_8B <- ggplot() +
   xlab("Age (Days) \n8B (-55 dB)") +
   ylab("") +
   th 
+
+pred_5A$Age = pred_5A$Age * sd(choice$Age) + mean(choice$Age)
 
 binom_age_5A <- ggplot() +
   geom_rect(aes(xmin = -Inf, xmax = Inf, ymin = 0.5, ymax = 1.2), fill = "#D95F02", alpha = 0.5) +

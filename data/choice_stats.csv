@@ -11,4 +11,6 @@ Spider,tunnel,leqxage2,-1.48,269,0.139,0.5908
 Spider,side,leq,0.3,244,0.761,0.6549
 Spider,side,age,-0.36,244,0.718,0.6549
 Spider,side,leqxage,-1.75,244,0.081,0.6549
-Silk,,,,,,
+Silk,choice_lq,leq,1.11,65,0.268,0.07151
+Silk,choice_lq,age,-0.72,65,0.469,0.07151
+Silk,choice_lq,leqxage,-1.94,65,0.053,0.07151
