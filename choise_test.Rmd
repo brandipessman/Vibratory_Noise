@@ -1956,7 +1956,7 @@ activity_graph
 
 ## Side with More Silk
 
-**tl;dr:** We used a logistic regression (binomial GLM) to determine the probability of spiders building webs on the loud (1) or quiet (0) side. We scaled and centered mean_leq, condition and age, but back transformed for graphs. Body condition was removed during backward selection. The likelihood of choosing one side over another did not vary by site Leq or age. However, an interaction between Leq and age suggests that the young spiders showed increasing choice for loud with origin Leq but older spiders did not exhibit a choice. Only the loudest site (8B) spiders had a majority choose a particular side (significant difference from 50%).
+**tl;dr:** We used a binomial regression to determine the probability of spiders building webs on the loud (1) or quiet (0) side. We scaled and centered mean_leq, condition and age, but back transformed for graphs. We got similar results with age and condition as polynomials or linear, so we used the linear. Body condition was removed during backward selection. The likelihood of choosing one side over another did not vary by site Leq or age. However, an interaction between Leq and age suggests a trend that the young spiders showed increasing choice for loud with origin Leq but older spiders did not exhibit a choice. Only the loudest site (8B) spiders had a majority choose a particular side (significant difference from 50%).
 
 The first thing we want to do is assess the number of spiders that "chose" (put more silk) on the loud side over the quiet side, and compare it across sites. We can analyze this question in a number of ways. Let's see a quick breakdown of the data.
 
@@ -2402,31 +2402,57 @@ binom
 
 Let's make the spider's choice more continuous than a yes/no question. We can look at the proportion of each spider's silk that was placed on the loud side.  
 
-Let's first look across site leq as we did before. We will use the buildglmmTMB to do backwards selection on a beta regression. If the random effect is removed (it was) we will proceed with the GAM betar with no random effect. 
+```{r prop loud quiet exploration, echo = FALSE, message = FALSE, warning = FALSE}
+mean_leq_raw <- choice %>% 
+    ggplot() +
+  geom_point(aes(x = mean_leq, y = propl, color = factor(mean_leq))) +
+  geom_smooth(aes(x = mean_leq, y = propl), color = "black") +
+  theme(legend.position = "top")
+
+Age_raw <- choice %>% 
+  ggplot() +
+  geom_point(aes(x = Age, y = propl, color = factor(mean_leq))) +
+  geom_smooth(aes(x = Age, y = propl), color = "black") +
+  theme(legend.position = "top")
+
+condition_raw <- choice %>% 
+  ggplot() +
+  geom_point(aes(x = condition, y = propl, color = factor(mean_leq))) +
+  geom_smooth(aes(x = condition, y = propl), color = "black") +
+  theme(legend.position = "top")
+
+ggarrange(Age_raw, condition_raw, mean_leq_raw, nrow = 2, ncol = 2)
+```
+
+Let's first look across site leq as we did before. We will use the buildglmmTMB to do backwards selection on a beta regression. 
 
 ```{r beta for leq, echo = FALSE, warning = FALSE, message = FALSE}
-beta_leq <- betareg(propl ~ mean_leq * Age, data = choice_scaled)
-#summary(beta_leq) # same as for beta with gam
+beta_leq <- betareg(propl ~ mean_leq * Age + mean_leq * condition, data = choice_scaled)
+summary(beta_leq) # same as for beta with gam
 
 #summary(buildglmmTMB(propl ~ mean_leq * Age + mean_leq * condition, data = choice_scaled, family = list(family = "beta", link = "logit")))
 # ID and condition removed
 
+beta_leq_gam <- gam(propl ~ mean_leq * Age + mean_leq * condition, data = choice_scaled, family = betar(link = "logit"))
+beta_leq_gam2 <- gam(propl ~ mean_leq * poly(Age, 2) + mean_leq * poly(condition, 2), data = choice_scaled, family = betar(link = "logit"))
+anova(beta_leq_gam, beta_leq_gam2, test = "Chisq") # no polys better
+beta_leq_gam3 <- gam(propl ~ mean_leq * Age + mean_leq * poly(condition, 2), data = choice_scaled, family = betar(link = "logit"))
+anova(beta_leq_gam, beta_leq_gam3, test = "Chisq") # no polys better
+beta_leq_gam4 <- gam(propl ~ mean_leq * poly(Age, 2) + mean_leq * condition, data = choice_scaled, family = betar(link = "logit"))
+anova(beta_leq_gam, beta_leq_gam4, test = "Chisq") # no polys better
+
 beta_leq_gam <- gam(propl ~ mean_leq * Age, data = choice_scaled, family = betar(link = "logit"))
 summary(beta_leq_gam)
+
 #simulateResiduals(beta_leq_gam, plot = TRUE)
 ```
-
-There is no overall effect of site average Leq on the proportion of silk on the loud or quiet side (z = `r round(summary(beta_leq_gam)$p.t[2], 2)`, df = `r summary(beta_leq_gam)$residual.df`, P `r ifelse(round(summary(beta_leq_gam)$p.pv[2], 3) == 0, print("< 0.001"), print(paste("=", round(summary(beta_leq_gam)$p.pv[2], 3))))`). 
-
-There is no overall effect of age on the proportion of silk on the loud or quiet side (z = `r round(summary(beta_leq_gam)$p.t[3], 2)`, df = `r summary(beta_leq_gam)$residual.df`, P `r ifelse(round(summary(beta_leq_gam)$p.pv[3], 3) == 0, print("< 0.001"), print(paste("=", round(summary(beta_leq_gam)$p.pv[3], 3))))`). 
-
-There is a significant interaction between site leq and age; specifically, younger spiders showed increasing choice for loud vibratory environments as origin leq increased, but older spiders show no preference (z = `r round(summary(beta_leq_gam)$p.t[4], 2)`, df = `r summary(beta_leq_gam)$residual.df`, P `r ifelse(round(summary(beta_leq_gam)$p.pv[4], 3) == 0, print("< 0.001"), print(paste("=", round(summary(beta_leq_gam)$p.pv[4], 3))))`).
 
 Let's test each site for choices that significantly differ from 50%. 
 
 ```{r beta for site differences, echo = FALSE, warning = FALSE, message = FALSE}
 #summary(buildglmmTMB(propl ~ Age + (1|ID), data = choice_8B, family = list(family = "beta", link = "logit"))) # ID removed
 beta_leq_gam_8B_age <- gam(propl ~ Age, data = choice_8B, family = betar(link = "logit"))
+summary(beta_leq_gam_8B_age)
 coef_beta_8B_age <- round(data.frame(estimates = summary(beta_leq_gam_8B_age)$p.coeff,
                                  se = summary(beta_leq_gam_8B_age)$se,
                                  z = summary(beta_leq_gam_8B_age)$p.t,
@@ -2434,18 +2460,11 @@ coef_beta_8B_age <- round(data.frame(estimates = summary(beta_leq_gam_8B_age)$p.
                                  3) %>% 
   mutate(Site = "8B",
          Leq = -55)
-beta_leq_gam_8B <- gam(propl ~ 1, data = choice_8B, family = betar(link = "logit"))
-coef_beta_8B <- round(data.frame(estimates = summary(beta_leq_gam_8B)$p.coeff,
-                                 se = summary(beta_leq_gam_8B)$se,
-                                 z = summary(beta_leq_gam_8B)$p.t,
-                                 p = summary(beta_leq_gam_8B)$p.pv),
-                                 3) %>% 
-  mutate(Site = "8B",
-         Leq = -55)
 
 
 #summary(buildglmmTMB(propl ~ Age + (1|ID), data = choice_8A, family = list(family = "beta", link = "logit"))) # ID and Age removed
 beta_leq_gam_8A <- gam(propl ~ 1, data = choice_8A, family = betar(link = "logit"))
+summary(beta_leq_gam_8A)
 coef_beta_8A <- round(data.frame(estimates = summary(beta_leq_gam_8A)$p.coeff,
                                  se = summary(beta_leq_gam_8A)$se,
                                  z = summary(beta_leq_gam_8A)$p.t,
@@ -2457,6 +2476,7 @@ coef_beta_8A <- round(data.frame(estimates = summary(beta_leq_gam_8A)$p.coeff,
 
 #summary(buildglmmTMB(propl ~ Age + (1|ID), data = choice_6C, family = list(family = "beta", link = "logit"))) # ID and Age removed
 beta_leq_gam_6C <- gam(propl ~ 1, data = choice_6C, family = betar(link = "logit"))
+summary(beta_leq_gam_6C)
 coef_beta_6C <- round(data.frame(estimates = summary(beta_leq_gam_6C)$p.coeff,
                                  se = summary(beta_leq_gam_6C)$se,
                                  z = summary(beta_leq_gam_6C)$p.t,
@@ -2468,6 +2488,7 @@ coef_beta_6C <- round(data.frame(estimates = summary(beta_leq_gam_6C)$p.coeff,
 
 #summary(buildglmmTMB(propl ~ Age + (1|ID), data = choice_5A, family = list(family = "beta", link = "logit"))) # ID and Age removed
 beta_leq_gam_5A <- gam(propl ~ 1, data = choice_5A, family = betar(link = "logit"))
+summary(beta_leq_gam_5A)
 coef_beta_5A <- round(data.frame(estimates = summary(beta_leq_gam_5A)$p.coeff,
                                  se = summary(beta_leq_gam_5A)$se,
                                  z = summary(beta_leq_gam_5A)$p.t,
@@ -2476,23 +2497,17 @@ coef_beta_5A <- round(data.frame(estimates = summary(beta_leq_gam_5A)$p.coeff,
   mutate(Site = "5A",
          Leq = -69)
 
-rbind(coef_beta_8B_age, coef_beta_8B, coef_beta_8A, coef_beta_6C, coef_beta_5A)
+rbind(coef_beta_8B_age, coef_beta_8A, coef_beta_6C, coef_beta_5A)
 ```
 
 Again, only 8B significantly differs from 50% and differs by age. 
 
-```{r origin test for beta, include = FALSE, warning = FALSE, message = FALSE}
+```{r origin test for beta, eval = FALSE, warning = FALSE, message = FALSE}
 beta_origin <- buildglmmTMB(propl ~ Origin * Age + Origin * condition, data = choice_scaled, family = list(family = "beta", link = "logit"))
 summary(beta_origin) #Origin:Age
-
-beta_leq_u <- gam(propl ~ Age, data = choice_urban, family = betar(link = "logit"))
-summary(beta_leq_u)
-
-beta_leq_r <- gam(propl ~ 1, data = choice_rural, family = betar(link = "logit"))
-summary(beta_leq_r)
 ```
 
-```{r looking at tunnel separate test, include = FALSE, warning = FALSE, message = FALSE}
+```{r looking at tunnel separate test, eval = FALSE, warning = FALSE, message = FALSE}
 #beta_leq_tunnel <- buildglmmTMB(propt_tunnel ~ mean_leq * Age + mean_leq * condition, data = choice_scaled, family = list(family = "beta", link = "logit"))
 beta_leq_tunnel <- gam(propt_tunnel ~ mean_leq, data = choice, family = betar(link = "logit"))
 summary(beta_leq_tunnel) # meanleq - sig positive
@@ -2517,8 +2532,6 @@ summary(beta_leq_tunnel_5A)
 #no age effects with silk in tunnel
 ```
 
-We get similar results when we include tunnel in the total. When we look at the proportion of silk in the tunnel, there is a significant increase by leq (z = `r round(summary(beta_leq_tunnel)$p.t[2], 2)`, df = `r summary(beta_leq_tunnel)$residual.df`, P `r ifelse(round(summary(beta_leq_tunnel)$p.pv[2], 3) == 0, print("< 0.001"), print(paste("=", round(summary(beta_leq_tunnel)$p.pv[2], 3))))`).
-
 ```{r adding proportion silk in tunnel, echo = FALSE, warning = FALSE, message = FALSE}
 choice_part <- choice %>% 
   pivot_longer(propl_tunnel:propt_tunnel, values_to = "prop_part", names_to = "part") %>% 
@@ -2528,11 +2541,13 @@ choice_part_scaled <- choice_part %>%
          mean_leq = c(scale(mean_leq)),
          condition = c(scale(condition)))
 
-#summary(buildglmmTMB(prop_part ~ part * mean_leq * Age + part * mean_leq * condition + (1|ID), data = choice_part_scaled, family = list(family = "beta", link = "logit"))) # keep part * mean_leq * Age
+summary(buildglmmTMB(prop_part ~ part * mean_leq * Age + part * mean_leq * condition + (1|ID), data = choice_part_scaled, family = list(family = "beta", link = "logit"))) # keep part * mean_leq * Age
 
-beta_leqt <- gam(prop_part ~ part * mean_leq * Age, data = choice_part_scaled, family = betar(link = "logit"))
+beta_leqt <- gam(prop_part ~ part * mean_leq + part * Age + part:mean_leq:Age, data = choice_part_scaled, family = betar(link = "logit"))
 anova(beta_leqt)
+summary(beta_leqt)
 lstrends(beta_leqt, pairwise ~ part, var = "mean_leq", at = list(Age = quantile(choice_part_scaled$Age, 0.25)))
+lstrends(beta_leqt, pairwise ~ part, var = "mean_leq", at = list(Age = quantile(choice_part_scaled$Age, 0.5)))
 lstrends(beta_leqt, pairwise ~ part, var = "mean_leq", at = list(Age = quantile(choice_part_scaled$Age, 0.75)))
 ```
 
@@ -2665,6 +2680,7 @@ pred_8B_age <- add_column(pred_8B_age, fit = predict(beta_leq_gam_8B_age, type =
                       se = predict(beta_leq_gam_8B_age, type = "response", newdata = pred_8B_age, se.fit = TRUE)$se.fit)
 
 # no age
+beta_leq_gam_8B <- gam(propl ~ 1, data = choice_8B, family = betar(link = "logit"))
 pred_8B = expand.grid(Site = "8B")
 pred_8B <- add_column(pred_8B, fit = predict(beta_leq_gam_8B, type = "response", newdata = pred_8B),
                       se = predict(beta_leq_gam_8B, type = "response", newdata = pred_8B, se.fit = TRUE)$se.fit)
@@ -2684,7 +2700,7 @@ pred_5A <- add_column(pred_5A, fit = predict(beta_leq_gam_5A, type = "response",
 pred <- rbind(pred_8B, pred_8A, pred_6C, pred_5A) #pred_all
 
 nval <- choice %>% 
-  group_by(Site_cat) %>% 
+  group_by(Site) %>% 
   count() 
 
 pred_8B_age <- pred_8B_age %>% 
@@ -2708,11 +2724,11 @@ prop_site_8B <- ggplot() +
 prop_site <- ggplot() +
   geom_rect(aes(xmin = -Inf, xmax = Inf, ymin = 0.5, ymax = 1), fill = "#D95F02", alpha = 0.5) +
   geom_rect(aes(xmin = -Inf, xmax = Inf, ymin = 0, ymax = 0.5), fill = "#1B9E77", alpha = 0.5) +
-  geom_point(aes(x = Site_cat, y = propl), data = choice, alpha = 0.75, color = "grey20") +
+  geom_point(aes(x = Site, y = propl), data = choice, alpha = 0.75, color = "grey20") +
   geom_hline(yintercept = 0.5, linetype = 2) +
   geom_point(aes(x = Site, y = fit), data = pred, size = 1.5, position = position_nudge(x = 0.25)) +
   geom_errorbar(aes(x = Site, ymin = fit - se, ymax = fit + se), data = pred, width = 0.15, position = position_nudge(x = 0.25)) +
-  geom_text(aes(x = Site_cat, y = 1.05, label = paste("n = ", n)), data = nval, size = 3) +
+  geom_text(aes(x = Site, y = 1.05, label = paste("n = ", n)), data = nval, size = 3) +
 scale_x_discrete(labels = c("5A" = "5A \n(-69 dB)", "6C" = "6C \n(-69 dB)", "8A" = "8A \n(-64 dB)", "8B" = "8B \n(-55 dB)")) +
   scale_fill_manual("Side with \nMore Silk", 
                     values = c("#1B9E77", "#D95F02"),
@@ -2731,7 +2747,7 @@ prop_site_all
 
 ```{r tunnel graph, echo = FALSE, warning = FALSE, message = FALSE, results = 'hide'}
 pred <- expand.grid(mean_leq = seq(-1, 1.4, 0.1),
-                    Age = quantile(choice_part_scaled$Age, probs = c(0.25, 0.75)),
+                    Age = quantile(choice_part_scaled$Age, probs = c(0.25, 0.5, 0.75)),
                     part = levels(choice_part_scaled$part))
 pred <- add_column(pred, fit = predict(beta_leqt, newdata = pred, type = "response"),
                  se = predict(beta_leqt, newdata = pred, type = "response", se.fit = TRUE)$se.fit)
@@ -2761,7 +2777,7 @@ ggplot() +
 
 ## Total Silk Use
 
-**tl;dr:** We used a negative binomial regression to test for differences in total silk use. Again, body condition had no effect. Total silk mass marginally decreased with site average Leq and significantly increased with age (especially for 8B and 6C). When we include silk mass in the tunnel in the total, leq is dropped from the model. 
+**tl;dr:** We used a negative binomial regression to test for differences in total silk use. Body condition had no effect. Total silk mass (without the tunnel) marginally decreased with site average Leq and significantly increased with age (especially for 8B and 6C). When we include silk mass in the tunnel in the total, leq is not significant (spiders from louder allocate silk to the tunnel). 
 
 Next we want to know if there are any overall changes in the amount of silk used. Proportional changes can be caused by a number of different changes. Increased proportion of silk on the loud side could mean:
 
@@ -2771,74 +2787,124 @@ Next we want to know if there are any overall changes in the amount of silk used
 
 - same silk overall, adds less silk to quiet and more to loud
 
+```{r total loud quiet tunnel exploration, echo = FALSE, message = FALSE, warning = FALSE}
+mean_leq_raw <- choice %>% 
+    ggplot() +
+  geom_point(aes(x = mean_leq, y = total_micro, color = factor(mean_leq))) +
+  geom_smooth(aes(x = mean_leq, y = total_micro), color = "black") +
+  theme(legend.position = "top")
+
+Age_raw <- choice %>% 
+  ggplot() +
+  geom_point(aes(x = Age, y = total_micro, color = factor(mean_leq))) +
+  geom_smooth(aes(x = Age, y = total_micro), color = "black") +
+  theme(legend.position = "top")
+
+condition_raw <- choice %>% 
+  ggplot() +
+  geom_point(aes(x = condition, y = total_micro, color = factor(mean_leq))) +
+  geom_smooth(aes(x = condition, y = total_micro), color = "black") +
+  theme(legend.position = "top")
+
+ggarrange(Age_raw, condition_raw, mean_leq_raw, nrow = 2, ncol = 2)
+```
+
 Let's look at the total silk mass used (only in loud + quiet). Let's use a negative binomial since the data is positive, interger with no upper bound, but overdispersion.
 
 ```{r total silk stats, echo = FALSE, warning = FALSE, message = FALSE}
 total <- glm.nb(total_micro ~ mean_leq * Age + mean_leq * condition, data = choice_scaled)
+total <- step(total)
 #drop1(total, test = "Chisq")
-total2 <- update(total, .~. -mean_leq:condition)
+#total2 <- update(total, .~. -mean_leq:condition)
 #drop1(total2, test = "Chisq")
-total3 <- update(total2, .~. -condition)
+#total3 <- update(total2, .~. -condition)
 #drop1(total3, test = "Chisq")
-total4 <- update(total3, .~. -mean_leq:Age)
+#total4 <- update(total3, .~. -mean_leq:Age)
 #drop1(total4, test = "Chisq")
-kable(round(coef(summary(total4)), 3))
+summary(total)
+with(summary(total), 1 - deviance/null.deviance)
 ```
 
 Only age and origin leq remained in the model.
 
-There is a trend that silk mass decreased with increasing origin leq (z = `r round(coef(summary(total4))[2, 3], 2)`, df = `r total4$df.residual`, P `r ifelse(round(coef(summary(total4))[2, 4], 3) == 0, print("< 0.001"), print(paste("=", round(coef(summary(total4))[2, 4], 3))))`). 
-
-The amount of silk increased with increasing age (z = `r round(coef(summary(total4))[3, 3], 2)`, df = `r total4$df.residual`, P `r ifelse(round(coef(summary(total4))[3, 4], 3) == 0, print("< 0.001"), print(paste("=", round(coef(summary(total4))[3, 4], 3))))`). 
-
 Let's also include tunnel silk in the total.
+
+```{r total loud quiet tunnel exploration, echo = FALSE, message = FALSE, warning = FALSE}
+mean_leq_raw <- choice %>% 
+    ggplot() +
+  geom_point(aes(x = mean_leq, y = total_micro_tunnel, color = factor(mean_leq))) +
+  geom_smooth(aes(x = mean_leq, y = total_micro_tunnel), color = "black") +
+  theme(legend.position = "top")
+
+Age_raw <- choice %>% 
+  ggplot() +
+  geom_point(aes(x = Age, y = total_micro_tunnel, color = factor(mean_leq))) +
+  geom_smooth(aes(x = Age, y = total_micro_tunnel), color = "black") +
+  theme(legend.position = "top")
+
+condition_raw <- choice %>% 
+  ggplot() +
+  geom_point(aes(x = condition, y = total_micro_tunnel, color = factor(mean_leq))) +
+  geom_smooth(aes(x = condition, y = total_micro_tunnel), color = "black") +
+  theme(legend.position = "top")
+
+ggarrange(Age_raw, condition_raw, mean_leq_raw, nrow = 2, ncol = 2)
+```
 
 ```{r total silk with tunnel stats, echo = FALSE, warning = FALSE, message = FALSE}
 total_tunnel <- glm.nb(total_micro_tunnel ~ mean_leq * Age + mean_leq * condition, data = choice_scaled)
+total_tunnel <- step(total_tunnel)
 #drop1(total_tunnel, test = "Chisq")
-total_tunnel2 <- update(total_tunnel, .~. -mean_leq:condition)
+#total_tunnel2 <- update(total_tunnel, .~. -mean_leq:condition)
 #drop1(total_tunnel2, test = "Chisq")
-total_tunnel3 <- update(total_tunnel2, .~. -condition)
+#total_tunnel3 <- update(total_tunnel2, .~. -condition)
 #drop1(total_tunnel3, test = "Chisq")
-total_tunnel4 <- update(total_tunnel3, .~. -mean_leq:Age)
+#total_tunnel4 <- update(total_tunnel3, .~. -mean_leq:Age)
 #drop1(total_tunnel4, test = "Chisq")
-total_tunnel5 <- update(total_tunnel4, .~. -mean_leq)
+#total_tunnel5 <- update(total_tunnel4, .~. -mean_leq)
 #drop1(total_tunnel5, test = "Chisq")
-kable(round(coef(summary(total_tunnel5)), 3))
+summary(total_tunnel)
+with(summary(total_tunnel), 1 - deviance/null.deviance)
 ```
 
-Only age remained in the model.
-
-The amount of silk increased with increasing age (z = `r round(coef(summary(total_tunnel5))[2, 3], 2)`, df = `r total_tunnel5$df.residual`, P `r ifelse(round(coef(summary(total_tunnel5))[2, 4], 3) == 0, print("< 0.001"), print(paste("=", round(coef(summary(total_tunnel5))[2, 4], 3))))`). 
+Only age was significant in the model.
 
 Let's look at each site. 
 
 ```{r total silk of each site, echo = FALSE, warning = FALSE, message = FALSE}
-total_8B <- glm.nb(total_micro ~ Age, data = choice_8B)
-total_tunnel_8B <- glm.nb(total_micro_tunnel ~ Age, data = choice_8B) #same
-#drop1(total_8B, test = "Chisq") # keep age
-coef_8B <- data.frame(round(coef(summary(total_8B)), 3),
+total_8B <- glm.nb(total_micro ~ Age + condition, data = choice_8B)
+total_8B <- step(total_8B) # age
+total_tunnel_8B <- glm.nb(total_micro_tunnel ~ Age + condition, data = choice_8B) 
+total_tunnel_8B <- step(total_tunnel_8B) # age
+summary(total_tunnel_8B)
+coef_8B <- data.frame(round(coef(summary(total_tunnel_8B)), 3),
                       Site = "8B",
                       mean_leq = -55)
 
-total_8A <- glm.nb(total_micro ~ Age, data = choice_8A)
-total_tunnel_8A <- glm.nb(total_micro_tunnel ~ Age, data = choice_8A) #same
-#drop1(total_8A, test = "Chisq") #drop age
-coef_8A <- data.frame(round(coef(summary(total_8A)), 3),
+total_8A <- glm.nb(total_micro ~ Age + condition, data = choice_8A)
+total_8A <- step(total_8A) # age
+total_tunnel_8A <- glm.nb(total_micro_tunnel ~ Age + condition, data = choice_8A)
+total_tunnel_8A <- step(total_tunnel_8A) # not age
+summary(total_tunnel_8A)
+coef_8A <- data.frame(round(coef(summary(total_tunnel_8A)), 3),
                       Site = "8A",
                       mean_leq = -64)
 
-total_6C <- glm.nb(total_micro ~ Age, data = choice_6C)
-total_tunnel_6C <- glm.nb(total_micro_tunnel ~ Age, data = choice_6C) #same
-#drop1(total_6C, test = "Chisq") # keep age
-coef_6C <- data.frame(round(coef(summary(total_6C)), 3),
+total_6C <- glm.nb(total_micro ~ Age + condition, data = choice_6C)
+total_6C <- step(total_6C) # age
+total_tunnel_6C <- glm.nb(total_micro_tunnel ~ Age + condition, data = choice_6C) 
+total_tunnel_6C <- step(total_tunnel_6C) # age
+summary(total_tunnel_6C)
+coef_6C <- data.frame(round(coef(summary(total_tunnel_6C)), 3),
                       Site = "6C",
                       mean_leq = -69)
 
-total_5A <- glm.nb(total_micro ~ Age, data = choice_5A)
-total_tunnel_5A <- glm.nb(total_micro_tunnel ~ Age, data = choice_5A) #same
-#drop1(total_5A, test = "Chisq") #drop age
-coef_5A <- data.frame(round(coef(summary(total_5A)), 3),
+total_5A <- glm.nb(total_micro ~ Age + condition, data = choice_5A)
+total_5A <- step(total_5A) # age
+total_tunnel_5A <- glm.nb(total_micro_tunnel ~ Age + condition, data = choice_5A)
+total_tunnel_5A <- step(total_tunnel_5A) # none
+summary(total_tunnel_5A)
+coef_5A <- data.frame(round(coef(summary(total_tunnel_5A)), 3),
                       Site = "5A",
                       mean_leq = -69)
 
@@ -2850,7 +2916,7 @@ Age only effects silk mass (with and without tunnel) in 8B and 6C.
 Let's check the assumptions.
 
 ```{r total silk assumptions, echo = FALSE, warning = FALSE, message = FALSE}
-test_silk <- augment(total4, data = choice_scaled)
+test_silk <- augment(total_tunnel, data = choice_scaled)
 resid_silk <- ggplot(test_silk, aes(x = .fitted, y = .resid)) + 
   geom_point() + 
   geom_smooth() +
@@ -2906,20 +2972,20 @@ test_silk %>%
 Looks good. Let's make some graphs!
 
 ```{r leq total silk graph, echo = FALSE, warning = FALSE, message = FALSE, results = 'hide'}
-pred = expand.grid(mean_leq = seq(-1, 1.4, 0.02),
-                 Age = quantile(choice_scaled$Age, probs = c(0.25, 0.75)))
-pred <- add_column(pred, fit = data.frame(predict(total4, newdata = pred, type = "response", se.fit = TRUE))$fit,
-                  se = data.frame(predict(total4, newdata = pred, type = "response", se.fit = TRUE))$se.fit )
+pred = expand.grid(mean_leq = quantile(choice_scaled$mean_leq, probs = c(0, 0.5, 1)),
+                 Age = seq(-2.5, 2.5, 0.05))
+pred <- add_column(pred, fit = data.frame(predict(total_tunnel, newdata = pred, type = "response", se.fit = TRUE))$fit,
+                  se = data.frame(predict(total_tunnel, newdata = pred, type = "response", se.fit = TRUE))$se.fit )
 # back transform
 pred$mean_leq = pred$mean_leq * sd(choice$mean_leq) + mean(choice$mean_leq)
 pred$Age = pred$Age * sd(choice$Age) + mean(choice$Age)
 
-labs <- c("Points: Raw Data < Median Age \nLines: Predictions at 1st Quartile Age",
-          "Points: Raw Data >= Median Age \nLines: Predictions at 3rd Quartile Age")
-names(labs) <- c("15", "32")
+#labs <- c("Points: Raw Data < Median Age \nLines: Predictions at 1st Quartile Age",
+#          "Points: Raw Data >= Median Age \nLines: Predictions at 3rd Quartile Age")
+#names(labs) <- c("15", "32")
 
-total_silk <- ggplot() +
-  geom_point(aes(x = mean_leq, y = total_micro), data = choice2) +
+ggplot() +
+  geom_point(aes(x = mean_leq, y = total_micro_tunnel), data = choice2) +
   geom_line(aes(x = mean_leq, y = fit), data = pred) +
   geom_ribbon(aes(x = mean_leq, y = fit, ymin = fit - (se * 1.96), ymax = fit + (se * 1.96)), data = pred, alpha = 0.5) +
   scale_y_continuous(limits = c(0, 3100), breaks = c(0, 500, 1000, 1500, 2000, 2500, 3000)) +
@@ -2928,6 +2994,21 @@ total_silk <- ggplot() +
   xlab("Site Average Leq (dB, 20-1000 Hz)") +
   th +
   facet_wrap(~Age, labeller = labeller(Age = labs))
+
+total_silk <- ggplot() +
+  geom_point(aes(x = Age, y = total_micro_tunnel, color = factor(mean_leq)), data = choice) +
+  geom_line(aes(x = Age, y = fit, color = factor(mean_leq)), data = pred) +
+  geom_ribbon(aes(x = Age, y = fit, ymin = fit - (se), ymax = fit + (se), fill = factor(mean_leq)), data = pred, alpha = 0.5) +
+  scale_y_continuous(limits = c(0, 3100), breaks = c(0, 500, 1000, 1500, 2000, 2500, 3000)) +
+  scale_fill_manual("Site Leq", 
+                    values = c("#1b9e77", "#7570b3", "#d95f02"), 
+                    labels = c("-69", "-64", "-55")) +
+  scale_color_manual("Site Leq", 
+                     values = c("#1b9e77", "#7570b3", "#d95f02"), 
+                     labels = c("-69", "-64", "-55")) +
+  ylab("Total Silk Mass (μg)") +
+  xlab("Age (Days Since Mature)") +
+  th
 
 jpeg("figures/total_silk.jpeg", width = 6.5, height = 4, units = "in", quality = 100, res = 300)
 print(total_silk)
@@ -2938,23 +3019,23 @@ total_silk
 ```{r site total silk graph, echo = FALSE, warning = FALSE, message = FALSE, results = 'hide'}
 pred_8B = expand.grid(Site = "8B",
                 Age = seq(0, 50, 1)) 
-pred_8B <- add_column(pred_8B, fit = predict(total_8B, type = "response", newdata = pred_8B),
-                      se = predict(total_8B, type = "response", newdata = pred_8B, se.fit = TRUE)$se.fit)
+pred_8B <- add_column(pred_8B, fit = predict(total_tunnel_8B, type = "response", newdata = pred_8B),
+                      se = predict(total_tunnel_8B, type = "response", newdata = pred_8B, se.fit = TRUE)$se.fit)
 
 pred_8A = expand.grid(Site = "8A",
                 Age = seq(0, 50, 1)) 
-pred_8A <- add_column(pred_8A, fit = predict(total_8A, type = "response", newdata = pred_8A),
-                      se = predict(total_8A, type = "response", newdata = pred_8A, se.fit = TRUE)$se.fit)
+pred_8A <- add_column(pred_8A, fit = predict(total_tunnel_8A, type = "response", newdata = pred_8A),
+                      se = predict(total_tunnel_8A, type = "response", newdata = pred_8A, se.fit = TRUE)$se.fit)
 
 pred_6C = expand.grid(Site = "6C",
                 Age = seq(0, 50, 1)) 
-pred_6C <- add_column(pred_6C, fit = predict(total_6C, type = "response", newdata = pred_6C),
-                      se = predict(total_6C, type = "response", newdata = pred_6C, se.fit = TRUE)$se.fit)
+pred_6C <- add_column(pred_6C, fit = predict(total_tunnel_6C, type = "response", newdata = pred_6C),
+                      se = predict(total_tunnel_6C, type = "response", newdata = pred_6C, se.fit = TRUE)$se.fit)
 
 pred_5A = expand.grid(Site = "5A",
                 Age = seq(0, 50, 1)) 
-pred_5A <- add_column(pred_5A, fit = predict(total_5A, type = "response", newdata = pred_5A),
-                      se = predict(total_5A, type = "response", newdata = pred_5A, se.fit = TRUE)$se.fit)
+pred_5A <- add_column(pred_5A, fit = predict(total_tunnel_5A, type = "response", newdata = pred_5A),
+                      se = predict(total_tunnel_5A, type = "response", newdata = pred_5A, se.fit = TRUE)$se.fit)
 
 pred <- rbind(pred_8B, pred_8A, pred_6C, pred_5A) %>% 
   mutate(Site = fct_relevel(Site, "8B", "8A", "6C", "5A"))
