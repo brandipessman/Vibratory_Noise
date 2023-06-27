@@ -3069,7 +3069,7 @@ So we know there is a trend that spiders used less silk when they were from loud
 
 ```{r get silk data, echo = FALSE, warning = FALSE, message = FALSE}
 choice_side <- choice %>% 
-  dplyr::select(ID, Age, condition, mean_leq, Site, Site_cat, Origin, loud_silk, quiet_silk) %>% 
+  dplyr::select(ID, Age, condition, mean_leq, Site, Origin, loud_silk, quiet_silk) %>% 
  pivot_longer(cols = c(loud_silk, quiet_silk), names_to = "side", values_to = "silk_mass") %>%
   mutate(side = fct_recode(side, "loud" = "loud_silk", "quiet" = "quiet_silk"),
          side = fct_relevel(side, "loud", "quiet"),
@@ -3082,6 +3082,28 @@ choice_side_scaled <- choice_side %>%
 ```
 
 Let's check the stats. We should use a negative binomial because the data appear to be overdispersed. We will similarly test leq with age and condition. 
+
+```{r silk by part exploration, echo = FALSE, message = FALSE, warning = FALSE}
+mean_leq_raw <- choice_side %>% 
+    ggplot() +
+  geom_point(aes(x = mean_leq, y = silk_mass_micro, color = factor(mean_leq))) +
+  geom_smooth(aes(x = mean_leq, y = silk_mass_micro), color = "black") +
+  theme(legend.position = "top")
+
+Age_raw <- choice_side %>% 
+  ggplot() +
+  geom_point(aes(x = Age, y = silk_mass_micro, color = factor(mean_leq))) +
+  geom_smooth(aes(x = Age, y = silk_mass_micro), color = "black") +
+  theme(legend.position = "top")
+
+condition_raw <- choice_side %>% 
+  ggplot() +
+  geom_point(aes(x = condition, y = silk_mass_micro, color = factor(mean_leq))) +
+  geom_smooth(aes(x = condition, y = silk_mass_micro), color = "black") +
+  theme(legend.position = "top")
+
+ggarrange(Age_raw, condition_raw, mean_leq_raw, nrow = 2, ncol = 2)
+```
 
 ```{r silk mass by leq, echo = FALSE, warning = FALSE, message = FALSE}
 #silk_side.nb <- glmer.nb(silk_mass_micro ~ side + mean_leq + Age + condition + side:mean_leq + side:Age + side:condition + side:mean_leq:Age + side: mean_leq:condition + (1|ID), data = choice_side_scaled)
@@ -3097,48 +3119,45 @@ Let's check the stats. We should use a negative binomial because the data appear
 #same as without random factor
 
 silk_side.nb <- glm.nb(silk_mass_micro ~ side + mean_leq + Age + condition + side:mean_leq + side:Age + side:condition + side:mean_leq:Age + side: mean_leq:condition, data = choice_side_scaled)
+silk_side.nb <- step(silk_side.nb)
 #drop1(silk_side.nb, test = "Chisq")
-silk_side.nb2 <- update(silk_side.nb, .~. -side:mean_leq:condition)
+#silk_side.nb2 <- update(silk_side.nb, .~. -side:mean_leq:condition)
 #drop1(silk_side.nb2, test = "Chisq")
-silk_side.nb3 <- update(silk_side.nb2, .~. -side:condition)
+#silk_side.nb3 <- update(silk_side.nb2, .~. -side:condition)
 #drop1(silk_side.nb3, test = "Chisq")
-silk_side.nb4 <- update(silk_side.nb3, .~. -condition)
+#silk_side.nb4 <- update(silk_side.nb3, .~. -condition)
 #drop1(silk_side.nb4, test = "Chisq")
 #summary(silk_side.nb4)
-kable(Anova(silk_side.nb4))
+Anova(silk_side.nb)
 ```
 
-The amount of silk on each side did not interact with leq (Chisq = `r round(Anova(silk_side.nb4)[4, 1], 2)`, df = `r silk_side.nb4$df.residual`, P `r ifelse(round(Anova(silk_side.nb4)[4, 3], 3) == 0, print("< 0.001"), print(paste("=", round(Anova(silk_side.nb4)[4, 3], 3))))`) or age (Chisq = `r round(Anova(silk_side.nb4)[5, 1], 2)`, df = `r silk_side.nb4$df.residual`, P `r ifelse(round(Anova(silk_side.nb4)[5, 3], 3) == 0, print("< 0.001"), print(paste("=", round(Anova(silk_side.nb4)[5, 3], 3))))`). 
-
-There is a significant interaction between side, age, and mean_leq (Chisq = `r round(Anova(silk_side.nb4)[6, 1], 2)`, df = `r silk_side.nb4$df.residual`, P `r ifelse(round(Anova(silk_side.nb4)[6, 3], 3) == 0, print("< 0.001"), print(paste("=", round(Anova(silk_side.nb4)[6, 3], 3))))`). 
-
-We can also subset by site and look for differences. 
+We see the same leq and age effect, but add a three-way interaction between leq, age, and side. We can also subset by site and look for differences. 
 
 ```{r silk mass by site, echo = FALSE, warning = FALSE, message = FALSE}
 # with random effect
 choice_side_8B <- choice_side %>% 
-  filter(Site_cat == "8B")
+  filter(Site == "8B")
 silk_side.nb_8B <- glmer.nb(silk_mass_micro ~ side * Age + (1|ID), data = choice_side_8B)
 coef_8B <- data.frame(Anova(silk_side.nb_8B),
                       Site = "8B",
                       mean_leq = -55)
 
 choice_side_8A <- choice_side %>% 
-  filter(Site_cat == "8A")
+  filter(Site == "8A")
 silk_side.nb_8A <- glmer.nb(silk_mass_micro ~ side * Age + (1|ID), data = choice_side_8A)
 coef_8A <- data.frame(Anova(silk_side.nb_8A),
                       Site = "8A",
                       mean_leq = -64)
 
 choice_side_6C <- choice_side %>% 
-  filter(Site_cat == "6C")
+  filter(Site == "6C")
 silk_side.nb_6C <- glmer.nb(silk_mass_micro ~ side * Age + (1|ID), data = choice_side_6C)
 coef_6C <- data.frame(Anova(silk_side.nb_6C),
                       Site = "6C",
                       mean_leq = -69)
 
 choice_side_5A <- choice_side %>% 
-  filter(Site_cat == "5A")
+  filter(Site == "5A")
 silk_side.nb_5A <- glmer.nb(silk_mass_micro ~ side * Age + (1|ID), data = choice_side_5A)
 coef_5A <- data.frame(Anova(silk_side.nb_5A),
                       Site = "5A",
@@ -3147,28 +3166,28 @@ coef_5A <- data.frame(Anova(silk_side.nb_5A),
 #rbind(coef_8B, coef_8A, coef_6C, coef_5A)
 
 choice_side_8B <- choice_side %>% 
-  filter(Site_cat == "8B")
+  filter(Site == "8B")
 silk_side.nb_8B <- glm.nb(silk_mass_micro ~ side * Age, data = choice_side_8B)
 coef_8B <- data.frame(Anova(silk_side.nb_8B),
                       Site = "8B",
                       mean_leq = -55)
 
 choice_side_8A <- choice_side %>% 
-  filter(Site_cat == "8A")
+  filter(Site == "8A")
 silk_side.nb_8A <- glm.nb(silk_mass_micro ~ side * Age, data = choice_side_8A)
 coef_8A <- data.frame(Anova(silk_side.nb_8A),
                       Site = "8A",
                       mean_leq = -64)
 
 choice_side_6C <- choice_side %>% 
-  filter(Site_cat == "6C")
+  filter(Site == "6C")
 silk_side.nb_6C <- glm.nb(silk_mass_micro ~ side * Age, data = choice_side_6C)
 coef_6C <- data.frame(Anova(silk_side.nb_6C),
                       Site = "6C",
                       mean_leq = -69)
 
 choice_side_5A <- choice_side %>% 
-  filter(Site_cat == "5A")
+  filter(Site == "5A")
 silk_side.nb_5A <- glm.nb(silk_mass_micro ~ side * Age, data = choice_side_5A)
 coef_5A <- data.frame(Anova(silk_side.nb_5A),
                       Site = "5A",
@@ -3181,7 +3200,7 @@ We only see effects in 8B where silk increased with age and an interaction revea
 Let's check the assumptions.
 
 ```{r silk mass assumptions, echo = FALSE, warning = FALSE, message = FALSE}
-test_silk <- augment(silk_side.nb4, data = choice_side)
+test_silk <- augment(silk_side.nb, data = choice_side)
 resid_silk <- ggplot(test_silk, aes(x = .fitted, y = .resid)) + 
   geom_point() + 
   geom_smooth() +
@@ -3242,15 +3261,16 @@ choice_side_scaled_filt <- choice_side_scaled %>%
   filter(! ID == "AP062",
          ! ID == "AP149")
 silk_side.nbf <- glm.nb(silk_mass_micro ~ side + mean_leq + Age + condition + side:mean_leq + side:Age + side:condition + side:mean_leq:Age + side: mean_leq:condition, data = choice_side_scaled_filt)
+silk_side.nbf <- step(silk_side.nbf)
 #drop1(silk_side.nbf, test = "Chisq")
-silk_side.nbf2 <- update(silk_side.nbf, .~. -side:mean_leq:condition)
+#silk_side.nbf2 <- update(silk_side.nbf, .~. -side:mean_leq:condition)
 #drop1(silk_side.nbf2, test = "Chisq")
-silk_side.nbf3 <- update(silk_side.nbf2, .~. -side:condition)
+#silk_side.nbf3 <- update(silk_side.nbf2, .~. -side:condition)
 #drop1(silk_side.nbf3, test = "Chisq")
-silk_side.nbf4 <- update(silk_side.nbf3, .~. -condition)
+#silk_side.nbf4 <- update(silk_side.nbf3, .~. -condition)
 #drop1(silk_side.nbf4, test = "Chisq")
 #summary(silk_side.nbf4)
-kable(Anova(silk_side.nbf4))
+Anova(silk_side.nbf)
 ```
 
 Same results with or without the outliers (yay!). Let's graph the results.
@@ -3259,8 +3279,8 @@ Same results with or without the outliers (yay!). Let's graph the results.
 pred = expand.grid(side = levels(choice_side$side),
                  mean_leq = seq(-1, 1.4, 0.02),
                  Age = quantile(choice_side_scaled$Age, probs = c(0.25, 0.75)))
-pred <- add_column(pred, fit = data.frame(predict(silk_side.nb4, newdata = pred, type = "response", se.fit = TRUE))$fit,
-                  se = data.frame(predict(silk_side.nb4, newdata = pred, type = "response", se.fit = TRUE))$se.fit )
+pred <- add_column(pred, fit = data.frame(predict(silk_side.nb, newdata = pred, type = "response", se.fit = TRUE))$fit,
+                  se = data.frame(predict(silk_side.nb, newdata = pred, type = "response", se.fit = TRUE))$se.fit )
 # back transform
 pred$mean_leq = pred$mean_leq * sd(choice_side$mean_leq) + mean(choice_side$mean_leq)
 pred$Age = pred$Age * sd(choice_side$Age) + mean(choice_side$Age)
@@ -3359,9 +3379,9 @@ silk_site
 
 ## Amount of Silk on Each Side and Tunnel
 
-```{r}
+```{r get silk part data, echo = FALSE, warning = FALSE, message = FALSE}
 choice_side2 <- choice %>% 
-  dplyr::select(ID, Age, condition, mean_leq, Site, Site_cat, Origin, loud_silk_v, quiet_silk_v, tunnel_silk_v) %>% 
+  dplyr::select(ID, Age, condition, mean_leq, Site, Origin, loud_silk_v, quiet_silk_v, tunnel_silk_v) %>% 
  pivot_longer(cols = c(loud_silk_v, quiet_silk_v, tunnel_silk_v), names_to = "part", values_to = "silk_mass") %>%
   mutate(part = fct_recode(part, "loud" = "loud_silk_v", "quiet" = "quiet_silk_v", "tunnel" = "tunnel_silk_v"),
          part = fct_relevel(part, "loud", "quiet", "tunnel"),
@@ -3373,18 +3393,39 @@ choice_side2_scaled <- choice_side2 %>%
          condition = c(scale(condition)))
 ```
 
-```{r}
+```{r silk part stats, echo = FALSE, warning = FALSE, message = FALSE}
 silk_sidet.nb <- glm.nb(silk_mass_nano ~ part + mean_leq + Age + condition + part:mean_leq + part:Age + part:condition + part:mean_leq:Age + part: mean_leq:condition, data = choice_side2_scaled)
-silk_sidet.nb2 <- step(silk_sidet.nb)
-Anova(silk_sidet.nb2)
-kable(Anova(silk_sidet.nb2))
-lsmeans(silk_sidet.nb2, pairwise ~ part)
-lstrends(silk_sidet.nb2, pairwise ~ part, var = "mean_leq")
+silk_sidet.nb <- step(silk_sidet.nb)
+Anova(silk_sidet.nb)
+lsmeans(silk_sidet.nb, pairwise ~ part)
+lstrends(silk_sidet.nb, pairwise ~ part, var = "mean_leq")
+lstrends(silk_sidet.nb, pairwise ~ part, var = "mean_leq")
+lstrends(silk_sidet.nb, pairwise ~ part, var = "Age", at = list(mean_leq = min(choice_side2_scaled$mean_leq)))
+lstrends(silk_sidet.nb, pairwise ~ part, var = "Age", at = list(mean_leq = median(choice_side2_scaled$mean_leq)))
+lstrends(silk_sidet.nb, pairwise ~ part, var = "Age", at = list(mean_leq = max(choice_side2_scaled$mean_leq)))
+
+silk_sidet.nb <- glmer.nb(silk_mass_nano ~ part + mean_leq + Age + condition + part:mean_leq + part:Age + part:condition + part:mean_leq:Age + part: mean_leq:condition + (1|ID), data = choice_side2_scaled)
+#drop1(silk_sidet.nb, test = "Chisq")
+silk_sidet.nb2 <- update(silk_sidet.nb, .~. -part:mean_leq:condition)
+#drop1(silk_sidet.nb2, test = "Chisq")
+silk_sidet.nb3 <- update(silk_sidet.nb2, .~. -part:condition)
+#drop1(silk_sidet.nb3, test = "Chisq")
+silk_sidet.nb4 <- update(silk_sidet.nb3, .~. -condition)
+#drop1(silk_sidet.nb4, test = "Chisq")
+silk_sidet.nb5 <- update(silk_sidet.nb4, .~. -part:mean_leq:Age)
+#drop1(silk_sidet.nb5, test = "Chisq")
+silk_sidet.nb6 <- update(silk_sidet.nb5, .~. -part:Age)
+#drop1(silk_sidet.nb6, test = "Chisq")
+silk_sidet.nb7 <- update(silk_sidet.nb6, .~. -part:mean_leq)
+#drop1(silk_sidet.nb7, test = "Chisq")
+silk_sidet.nb8 <- update(silk_sidet.nb7, .~. -mean_leq)
+#drop1(silk_sidet.nb8, test = "Chisq")
+Anova(silk_sidet.nb8)
 ```
 
-```{r}
+```{r silk part stats by site, echo = FALSE, warning = FALSE, message = FALSE}
 choice_side2_scaled_8B <- choice_side2_scaled %>% 
-  filter(Site_cat == "8B")
+  filter(Site == "8B")
 silk_sidet.nb_8B <- glm.nb(silk_mass_nano ~ part * Age, data = choice_side2_scaled_8B)
 coef_8B <- data.frame(Anova(silk_sidet.nb_8B),
                       Site = "8B",
@@ -3393,7 +3434,7 @@ lsmeans(silk_sidet.nb_8B, pairwise ~ part) # more in tunnel than loud and quiet
 lstrends(silk_sidet.nb_8B, pairwise ~ part, var = "Age") # loud quiet int
 
 choice_side2_scaled_8A <- choice_side2_scaled %>% 
-  filter(Site_cat == "8A")
+  filter(Site == "8A")
 silk_sidet.nb_8A <- glm.nb(silk_mass_nano ~ part * Age, data = choice_side2_scaled_8A)
 coef_8A <- data.frame(Anova(silk_sidet.nb_8A),
                       Site = "8A",
@@ -3402,7 +3443,7 @@ lsmeans(silk_sidet.nb_8A, pairwise ~ part) # none
 lstrends(silk_sidet.nb_8A, pairwise ~ part, var = "Age") #none
 
 choice_side2_scaled_6C <- choice_side2_scaled %>% 
-  filter(Site_cat == "6C")
+  filter(Site == "6C")
 silk_sidet.nb_6C <- glm.nb(silk_mass_nano ~ part * Age, data = choice_side2_scaled_6C)
 coef_6C <- data.frame(Anova(silk_sidet.nb_6C),
                       Site = "6C",
@@ -3411,7 +3452,7 @@ lsmeans(silk_sidet.nb_6C, pairwise ~ part) # more in tunnel than loud
 lstrends(silk_sidet.nb_6C, pairwise ~ part, var = "Age") #none
 
 choice_side2_scaled_5A <- choice_side2_scaled %>% 
-  filter(Site_cat == "5A")
+  filter(Site == "5A")
 silk_sidet.nb_5A <- glm.nb(silk_mass_nano ~ part * Age, data = choice_side2_scaled_5A)
 coef_5A <- data.frame(Anova(silk_sidet.nb_5A),
                       Site = "5A",
@@ -3422,12 +3463,15 @@ lstrends(silk_sidet.nb_5A, pairwise ~ part, var = "Age") #none
 rbind(coef_8B, coef_8A, coef_6C, coef_5A)
 ```
 
-```{r , echo = FALSE, warning = FALSE, message = FALSE, results = 'hide'}
+```{r silk part graph, echo = FALSE, warning = FALSE, message = FALSE, results = 'hide'}
+silk_sidet.nb <- glm.nb(silk_mass_nano ~ part + mean_leq + Age + condition + part:mean_leq + part:Age + part:condition + part:mean_leq:Age + part: mean_leq:condition, data = choice_side2_scaled)
+silk_sidet.nb <- step(silk_sidet.nb)
+
 pred = expand.grid(part = levels(choice_side2$part),
                  mean_leq = seq(-1, 1.4, 0.02),
                  Age = quantile(choice_side2_scaled$Age, probs = c(0.25, 0.75)))
-pred <- add_column(pred, fit = data.frame(predict(silk_sidet.nb2, newdata = pred, type = "response", se.fit = TRUE))$fit,
-                  se = data.frame(predict(silk_sidet.nb2, newdata = pred, type = "response", se.fit = TRUE))$se.fit )
+pred <- add_column(pred, fit = data.frame(predict(silk_sidet.nb, newdata = pred, type = "response", se.fit = TRUE))$fit,
+                  se = data.frame(predict(silk_sidet.nb, newdata = pred, type = "response", se.fit = TRUE))$se.fit )
 # back transform
 pred$mean_leq = pred$mean_leq * sd(choice_side2$mean_leq) + mean(choice_side2$mean_leq)
 pred$Age = pred$Age * sd(choice_side2$Age) + mean(choice_side2$Age)
@@ -3445,7 +3489,7 @@ labs <- c("Points: Raw Data < Median Age \nLines: Predictions at 1st Quartile Ag
           "Points: Raw Data >= Median Age \nLines: Predictions at 3rd Quartile Age")
 names(labs) <- c("15", "32")
 
-silk_side2 <- ggplot() +
+ggplot() +
   geom_point(aes(x = mean_leq, y = silk_mass_nano, color = part), data = choice_side3) +
   geom_line(aes(x = mean_leq, y = fit, color = part), data = pred) +
   geom_ribbon(aes(x = mean_leq, y = fit, ymin = fit - (se * 1.96), ymax = fit + (se * 1.96), fill = part), data = pred, alpha = 0.5) +
@@ -3461,35 +3505,61 @@ silk_side2 <- ggplot() +
   th +
   facet_wrap(~Age, labeller = labeller(Age = labs))
 
+
+
+pred = expand.grid(part = levels(choice_side2$part),
+                 mean_leq = quantile(choice_side2_scaled$mean_leq, probs = c(0, 0.5, 1)),
+                 Age = seq(-2.5, 2.5, 0.05))
+pred <- add_column(pred, fit = data.frame(predict(silk_sidet.nb, newdata = pred, type = "response", se.fit = TRUE))$fit,
+                  se = data.frame(predict(silk_sidet.nb, newdata = pred, type = "response", se.fit = TRUE))$se.fit )
+# back transform
+pred$mean_leq = pred$mean_leq * sd(choice_side2$mean_leq) + mean(choice_side2$mean_leq)
+pred$Age = pred$Age * sd(choice_side2$Age) + mean(choice_side2$Age)
+
+silk_side2 <- ggplot() +
+  geom_point(aes(x = Age, y = silk_mass_nano, color = part), data = choice_side2) +
+  geom_line(aes(x = Age, y = fit, color = part), data = pred) +
+  geom_ribbon(aes(x = Age, y = fit, ymin = fit - (se), ymax = fit + (se), fill = part), data = pred, alpha = 0.5) +
+  ylab(bquote('Silk Mass '(ng/cm^3))) +
+  xlab("Age (Days Since Mature)") +
+  scale_color_manual("Part", 
+                    values = c("#D95F02", "#1B9E77", "#666666"), 
+                    labels = c("Loud", "Quiet", "Tunnel")) +
+  scale_fill_manual("Part", 
+                    values = c("#D95F02", "#1B9E77", "#666666"), 
+                    labels = c("Loud", "Quiet", "Tunnel")) +
+  th +
+  facet_wrap(~ mean_leq, labeller = labeller(mean_leq = c("-69" = "Leq: -69 dB", "-64" = "Leq: -64 dB", "-55" = "Leq: -55 dB")))
+
 jpeg("figures/silk_side2.jpeg", width = 6.5, height = 4, units = "in", quality = 100, res = 300)
 print(silk_side2)
 dev.off()
 silk_side2
 ```
 
-```{r , echo = FALSE, warning = FALSE, message = FALSE, results = 'hide'}
+```{r silk part by site graph, echo = FALSE, warning = FALSE, message = FALSE, results = 'hide'}
 pred_8B = expand.grid(Site = "8B",
                 Age = seq(-2.5, 2.5, 0.1),
-                part = levels(choice_side2_8B$part)) 
+                part = levels(choice_side2$part)) 
 pred_8B <- add_column(pred_8B, fit = predict(silk_sidet.nb_8B, type = "response", newdata = pred_8B),
                       se = predict(silk_sidet.nb_8B, type = "response", newdata = pred_8B, se.fit = TRUE)$se.fit) 
 
 
 pred_8A = expand.grid(Site = "8A",
                 Age = seq(-2.5, 2.5, 0.1),
-                part = levels(choice_side2_8A$part))
+                part = levels(choice_side2$part))
 pred_8A <- add_column(pred_8A, fit = predict(silk_sidet.nb_8A, type = "response", newdata = pred_8A),
                       se = predict(silk_sidet.nb_8A, type = "response", newdata = pred_8A, se.fit = TRUE)$se.fit)
 
 pred_6C = expand.grid(Site = "6C",
                 Age = seq(-2.5, 2.5, 0.1),
-                part = levels(choice_side2_6C$part))
+                part = levels(choice_side2$part))
 pred_6C <- add_column(pred_6C, fit = predict(silk_sidet.nb_6C, type = "response", newdata = pred_6C),
                       se = predict(silk_sidet.nb_6C, type = "response", newdata = pred_6C, se.fit = TRUE)$se.fit) 
 
 pred_5A = expand.grid(Site = "5A",
                 Age = seq(-2.5, 2.5, 0.1),
-                part = levels(choice_side2_5A$part))
+                part = levels(choice_side2$part))
 pred_5A <- add_column(pred_5A, fit = predict(silk_sidet.nb_5A, type = "response", newdata = pred_5A),
                       se = predict(silk_sidet.nb_5A, type = "response", newdata = pred_5A, se.fit = TRUE)$se.fit) 
 
@@ -3530,6 +3600,28 @@ silk_site2
 
 We can get an idea of how decisive the spiders are by substracting the proportion of silk on one side from the proportion of silk on the other and taking the absolute value. This value ranges from indecisive 0 (50:50 silk each side) to completely decisive 1 (100:0 silk on each side), so we will use a beta regression.
 
+```{r diff exploration, echo = FALSE, message = FALSE, warning = FALSE}
+mean_leq_raw <- choice %>% 
+    ggplot() +
+  geom_point(aes(x = mean_leq, y = prop_diff, color = factor(mean_leq))) +
+  geom_smooth(aes(x = mean_leq, y = prop_diff), color = "black") +
+  theme(legend.position = "top")
+
+Age_raw <- choice %>% 
+  ggplot() +
+  geom_point(aes(x = Age, y = prop_diff, color = factor(mean_leq))) +
+  geom_smooth(aes(x = Age, y = prop_diff), color = "black") +
+  theme(legend.position = "top")
+
+condition_raw <- choice %>% 
+  ggplot() +
+  geom_point(aes(x = condition, y = prop_diff, color = factor(mean_leq))) +
+  geom_smooth(aes(x = condition, y = prop_diff), color = "black") +
+  theme(legend.position = "top")
+
+ggarrange(Age_raw, condition_raw, mean_leq_raw, nrow = 2, ncol = 2)
+```
+
 ```{r diff leq, echo = FALSE, warning = FALSE, message = FALSE}
 # proportion difference without tunnel
 #summary(buildglmmTMB(prop_diff ~ mean_leq * Age + mean_leq * condition, data = choice_scaled, family = list(family = "beta", link = "logit")))
@@ -3553,10 +3645,6 @@ summary(model.beta.gam.diff3)
 model.beta.gam.diff4 <- gam(prop_diff_tunnel ~ Origin, data = choice_scaled, family = betar(link = "logit"))
 summary(model.beta.gam.diff4)
 ```
-
-There is a trend that the proportional difference decreases with leq (z = `r round(summary(model.beta.gam.diff)$p.t[2], 2)`, df = `r summary(model.beta.gam.diff)$residual.df`, P `r ifelse(round(summary(model.beta.gam.diff)$p.pv[2], 3) == 0, print("< 0.001"), print(paste("=", round(summary(model.beta.gam.diff)$p.pv[2], 3))))`). 
-
-The proportional difference is significantly higher for rural than urban spiders (z = `r round(summary(model.beta.gam.diff2)$p.t[2], 2)`, df = `r summary(model.beta.gam.diff2)$residual.df`, P `r ifelse(round(summary(model.beta.gam.diff2)$p.pv[2], 3) == 0, print("< 0.001"), print(paste("=", round(summary(model.beta.gam.diff2)$p.pv[2], 3))))`). 
 
 Let's also see how each site is responding. 
 
@@ -3711,7 +3799,7 @@ val <- data.frame(Site = c("5A", "6C", "8A", "8B"),
 
 
 diff_site <- ggplot() +
-  geom_point(aes(x=Site_cat, y = prop_diff), data = choice, alpha = 0.75, color = "grey20") +
+  geom_point(aes(x=Site, y = prop_diff), data = choice, alpha = 0.75, color = "grey20") +
   geom_point(aes(x = Site, y = fit), data = pred, size = 1.5, position = position_nudge(0.25)) +
   geom_errorbar(aes(x = Site, ymin = fit - (se * 1.), ymax = fit + (se * 1.)), data = pred, width = 0.15, position = position_nudge(0.25)) +
   geom_text(aes(x = Site, y = prop_diff, label = prop), data = val, position = position_nudge(0.5), size = 3) +
@@ -3729,7 +3817,7 @@ diff_site
 
 choice3 <- choice %>% 
   mutate(abs_diff = propl - (1-propl)) %>% 
-  group_by(Site_cat, side_w_more) %>% 
+  group_by(Site, side_w_more) %>% 
   summarize(mean = mean(abs_diff),
             se = plotrix::std.error(abs_diff))
 
@@ -3739,252 +3827,11 @@ choice %>%
 ggplot() +
     geom_rect(aes(xmin = -Inf, xmax = Inf, ymin = 0, ymax = 1), fill = "#D95F02", alpha = 0.5) +
   geom_rect(aes(xmin = -Inf, xmax = Inf, ymin = -1, ymax = 0), fill = "#1B9E77", alpha = 0.5) +
-  geom_point(aes(x=Site_cat, y = abs_diff), alpha = 0.75, color = "grey20") +
-  geom_point(aes(x = Site_cat, y = mean), size = 1.5, data = choice3, position = position_nudge(0.25)) +
-  geom_errorbar(aes(x = Site_cat, y = mean, ymin = mean - se, ymax = mean + se), width = 0.15, data = choice3, position = position_nudge(0.25)) +
+  geom_point(aes(x=Site, y = abs_diff), alpha = 0.75, color = "grey20") +
+  geom_point(aes(x = Site, y = mean), size = 1.5, data = choice3, position = position_nudge(0.25)) +
+  geom_errorbar(aes(x = Site, y = mean, ymin = mean - se, ymax = mean + se), width = 0.15, data = choice3, position = position_nudge(0.25)) +
   geom_hline(yintercept = 0, linetype = 2) +
   xlab("Site") +
   ylab("Proportional Difference Between Sides") +
   th
-```
-
-# Spider Position Across Days
-
-
-```{r tunnel, echo = FALSE, message = FALSE, warning = FALSE}
-tunnel_8B <- tunnel %>% 
-  filter(Site == "8B") %>% 
-  mutate(Dim.1 = c(scale(Dim.1)))
-t1 <- glm(tunnel ~ day * Dim.1, data = tunnel_8B, family = binomial)
-t2 <- step(t1)
-Anova(t2) # day
-
-tunnel_8A <- tunnel %>% 
-  filter(Site == "8A") %>% 
-  mutate(Dim.1 = c(scale(Dim.1)))
-
-t1 <- glm(tunnel ~ day * Dim.1, data = tunnel_8A, family = binomial)
-t2 <- step(t1)
-#Anova(t2)
-
-tunnel_6C <- tunnel %>% 
-  filter(Site == "6C") %>% 
-  mutate(Dim.1 = c(scale(Dim.1)))
-
-t1 <- glm(tunnel ~ day * Dim.1, data = tunnel_6C, family = binomial)
-t2 <- step(t1)
-Anova(t2) # day
-
-tunnel_5A <- tunnel %>% 
-  filter(Site == "5A") %>% 
-  mutate(Dim.1 = c(scale(Dim.1)))
-
-t1 <- glm(tunnel ~ day * Dim.1, data = tunnel_5A, family = binomial)
-t2 <- step(t1)
-#Anova(t2)
-```
-
-
-```{r}
-loud <- choice_spider %>% 
-  mutate(loud = ifelse(side_lq == "loud", 1, 0))
-loud_scaled <- loud %>% 
-  mutate(Age = c(scale(Age)),
-         #mean_leq = factor(mean_leq),
-         mean_leq = c(scale(mean_leq)),
-         condition = c(scale(condition)))
-
-l1 <- glm(loud ~ mean_leq * day * Age + mean_leq * day * condition, data = loud_scaled, family = binomial)
-l2 <- step(l1)
-l2 <- glm(loud ~ mean_leq * Age, data = loud_scaled, family = binomial)
-Anova(l2)
-
-pred = expand.grid(mean_leq = seq(-1, 1.4, 0.02),
-                   #mean_leq = c(min(stay_scaled$mean_leq),
-                  #              median(stay_scaled$mean_leq),
-                  #              max(stay_scaled$mean_leq)),
-                 Age = quantile(loud_scaled$Age, probs = c(0.25, 0.75)))
-pred <- add_column(pred, fit = data.frame(predict(l2, newdata = pred, type = "response", se.fit = TRUE))$fit,
-                  se = data.frame(predict(l2, newdata = pred, type = "response", se.fit = TRUE))$se.fit )
-# back transform
-pred$Age = pred$Age * sd(loud$Age) + mean(loud$Age)
-pred$mean_leq = pred$mean_leq * sd(loud$mean_leq) + mean(loud$mean_leq)
-
-ggplot() +
-  geom_line(aes(x = mean_leq, y = fit, color = factor(Age)), data = pred) +
-  geom_ribbon(aes(x = mean_leq, y = fit, ymin = fit - se, ymax = fit + se, fill = factor(Age)), data = pred, alpha = 0.5)
-
-quiet <- choice_spider %>% 
-  mutate(quiet = ifelse(side_lq == "quiet", 1, 0))
-quiet_scaled <- quiet %>% 
-  mutate(Age = c(scale(Age)),
-         #mean_leq = factor(mean_leq),
-         mean_leq = c(scale(mean_leq)),
-         condition = c(scale(condition)))
-
-q1 <- glm(quiet ~ mean_leq * day * Age + mean_leq * day * condition, data = quiet_scaled, family = binomial)
-q2 <- step(q1)
-Anova(q2)
-
-pred = expand.grid(mean_leq = seq(-1, 1.4, 0.02),
-                   #mean_leq = c(min(stay_scaled$mean_leq),
-                  #              median(stay_scaled$mean_leq),
-                  #              max(stay_scaled$mean_leq)),
-                 Age = quantile(quiet_scaled$Age, probs = c(0.25, 0.75)))
-pred <- add_column(pred, fit = data.frame(predict(q2, newdata = pred, type = "response", se.fit = TRUE))$fit,
-                  se = data.frame(predict(q2, newdata = pred, type = "response", se.fit = TRUE))$se.fit )
-# back transform
-pred$Age = pred$Age * sd(quiet$Age) + mean(quiet$Age)
-pred$mean_leq = pred$mean_leq * sd(quiet$mean_leq) + mean(quiet$mean_leq)
-
-ggplot() +
-  geom_line(aes(x = mean_leq, y = fit, color = factor(Age)), data = pred) +
-  geom_ribbon(aes(x = mean_leq, y = fit, ymin = fit - se, ymax = fit + se, fill = factor(Age)), data = pred, alpha = 0.5)
-
-
-#remove tunnel
-
-```
-
-There is a significant difference between 5A and 6C, but no difference with leq.
-
-```{r}
-
-
-sum2 <- choice_spider %>% 
-  group_by(Site, Origin, side_lq) %>% 
-  count() %>% 
-  mutate(side_lq = factor(side_lq), 
-         side_lq = fct_relevel(side_lq, "tunnel", "quiet", "loud"))
-
-# site by side_pot
-ggplot() +
-  geom_bar(aes(x = Site, y = n, fill = side_lq), position="fill", stat="identity", data = sum2)
-
-sum3 <- choice_spider %>% 
-  group_by(day, side_lq) %>% 
-  count() %>% 
-  mutate(side_lq = factor(side_lq), 
-         side_lq = fct_relevel(side_lq, "tunnel", "quiet", "loud"))
-
-# day by side_pot
-ggplot() +
-  geom_bar(aes(x = day, y = n, fill = side_lq), position="fill", stat="identity", data = sum3)
-
-sum_d4 <- choice_spider %>% 
-  filter(day == 4) %>% 
-  group_by(Site, Origin, side_lq) %>% 
-  count() %>% 
-  mutate(side_lq = factor(side_lq), 
-         side_lq = fct_relevel(side_lq, "tunnel", "quiet", "loud"))
-
-day4 <- ggplot() +
-  geom_bar(aes(x = Site, y = n, fill = side_lq), position="fill", stat="identity", data = sum_d4) + 
-  geom_hline(yintercept = 0.5, linetype = 2)
-
-sum_d1 <- choice_spider %>% 
-  filter(day == 1) %>% 
-  group_by(Site, Origin, side_lq) %>% 
-  count() %>% 
-  mutate(side_lq = factor(side_lq), 
-         side_lq = fct_relevel(side_lq, "tunnel", "quiet", "loud"))
-
-day1 <- ggplot() +
-  geom_bar(aes(x = Site, y = n, fill = side_lq), position="fill", stat="identity", data = sum_d1) + 
-  geom_hline(yintercept = 0.5, linetype = 2)
-
-ggarrange(day1, day4, nrow = 1, common.legend = TRUE)
-```
-
-```{r}
-# make a data set that for each spider each day has 1 for the spider was in that part (tunnel, loud, or quiet) or 0 for they were not in that part
-choice_spider2 <- choice_spider %>% 
-  mutate(loud = ifelse(side_lq == "loud", 1, 0),
-         quiet = ifelse(side_lq == "quiet", 1, 0),
-         tunnel = ifelse(side_lq == "tunnel", 1, 0)) %>% 
-  pivot_longer(loud:tunnel, values_to = "chosen", names_to = "side_pot")
-
-choice_spider2_scaled <- choice_spider2 %>% 
-  mutate(day = c(scale(day)),
-         Age = c(scale(Age)),
-         mean_leq = factor(mean_leq),
-         #mean_leq = c(scale(mean_leq)),
-         condition = c(scale(condition)))
-
-mod <- glm(chosen ~ side_pot * Site, family = binomial, data = choice_spider2_scaled)
-mod <- step(mod)
-Anova(mod)
-mod <- glm(chosen ~ 
-             side_pot:day +
-             side_pot:mean_leq +
-             side_pot:Age +
-             side_pot:condition +
-             side_pot:day:mean_leq + #removed
-             side_pot:day:Age + #removed
-             side_pot:day:condition + #removed
-             side_pot:mean_leq:Age +
-             side_pot:mean_leq:condition, family = binomial, data = choice_spider2_scaled)
-mod <- step(mod)
-Anova(mod)
-lstrends(mod, pairwise ~ side_pot, var = "day")
-lstrends(mod, pairwise ~ side_pot | mean_leq, var = "Age")
-lstrends(mod, pairwise ~ mean_leq | side_pot, var = "Age")
-lstrends(mod, pairwise ~ side_pot | mean_leq, var = "condition")
-lstrends(mod, pairwise ~ mean_leq | side_pot, var = "condition")
-```
-
-```{r}
-choice_spider_scaled <- choice_spider %>% 
-  mutate(mean_leq = c(scale(mean_leq)),
-         Age = c(scale(Age)),
-         condition = c(scale(condition)),
-         day = c(scale(day)))
-
-spider <- glmer(side ~ day + Origin + Age + condition + day:Origin + day:Age + day:condition + day:Origin:Age + day:Origin:condition +(1 | ID), data = choice_spider_scaled, family = binomial, glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000)))
-summary(glmer(side ~ day*Origin + (1 | ID), data = choice_spider_scaled, family = binomial, glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))))
-drop1(spider, test = "Chisq")
-spider2 <- update(spider, .~. -day:Origin:condition)
-drop1(spider2, test = "Chisq")
-spider3 <- update(spider2, .~. -day:Origin:Age)
-drop1(spider3, test = "Chisq")
-spider4 <- update(spider3, .~. -day:Origin)
-drop1(spider4, test = "Chisq")
-spider5 <- update(spider4, .~. -Origin)
-drop1(spider5, test = "Chisq")
-spider6 <- update(spider5, .~. -day:Age)
-drop1(spider6, test = "Chisq")
-spider7 <- update(spider6, .~. -Age)
-drop1(spider7, test = "Chisq")
-spider8 <- update(spider7, .~. -day:condition)
-drop1(spider8, test = "Chisq")
-spider9 <- update(spider8, .~. -day)
-drop1(spider9, test = "Chisq")
-summary(spider)
-
-day1 <- choice_spider %>% 
-  filter(day == 1)
-summary(glm(side ~ mean_leq, data = day1, family = binomial))
-summary(glm(side ~ 1, data = day1, family = binomial))
-
-day2 <- choice_spider %>% 
-  filter(day == 2)
-summary(glm(side ~ mean_leq, data = day2, family = binomial))
-summary(glm(side ~ 1, data = day2, family = binomial))
-
-day3 <- choice_spider %>% 
-  filter(day == 3)
-summary(glm(side ~ mean_leq, data = day3, family = binomial))
-summary(glm(side ~ 1, data = day3, family = binomial))
-
-day4 <- choice_spider %>% 
-  filter(day == 4)
-summary(glm(side ~ mean_leq, data = day4, family = binomial))
-summary(glm(side ~ 1, data = day4, family = binomial))
-
-choice_spider %>% 
-  group_by(day, mean_leq) %>% 
-  count(side_lq) %>% 
-  pivot_wider(values_from = n, names_from = side_lq) %>% 
-  mutate(prop = loud / (loud + quiet)) %>% 
-  arrange(mean_leq)
 ```
