@@ -1041,10 +1041,10 @@ stay_scaled2 <- stay %>%
          Age = c(scale(Age)),
          condition = c(scale(condition)))
 
-#stay.binom2a <- glm(stay_side ~  mean_leq * poly(Age, 2) + mean_leq * poly(condition, 2), data #= stay_scaled2, family = binomial)
-#stay.binom2b <- glm(stay_side ~  mean_leq * Age + mean_leq * poly(condition, 2), data = #stay_scaled2, family = binomial)
-#stay.binom2c <- glm(stay_side ~  mean_leq * poly(Age, 2) + mean_leq * condition, data = #stay_scaled2, family = binomial)
-#stay.binom2d <- glm(stay_side ~  mean_leq * Age + mean_leq * condition, data = stay_scaled2, #family = binomial)
+#stay.binom2a <- glm(stay_side ~  mean_leq * poly(Age, 2) + mean_leq * poly(condition, 2), data = stay_scaled2, family = binomial)
+#stay.binom2b <- glm(stay_side ~  mean_leq * Age + mean_leq * poly(condition, 2), data = stay_scaled2, family = binomial)
+#stay.binom2c <- glm(stay_side ~  mean_leq * poly(Age, 2) + mean_leq * condition, data = stay_scaled2, family = binomial)
+#stay.binom2d <- glm(stay_side ~  mean_leq * Age + mean_leq * condition, data = stay_scaled2, family = binomial)
 #anova(stay.binom2a, stay.binom2d, test = "Chisq")
 #anova(stay.binom2b, stay.binom2d, test = "Chisq")
 #anova(stay.binom2c, stay.binom2d, test = "Chisq") # Use simplest
@@ -1356,6 +1356,7 @@ Let's graph the results.
 
 ```{r tunnel graph, echo = FALSE, message = FALSE, warning = FALSE, results = 'hide'}
 tunnel.mod <- glmer(tunnel ~ mean_leq * poly(Age, 2) + (1|ID), data = tunnel_scaled, family = binomial) 
+summary(tunnel.mod)
 MuMIn::r.squaredGLMM(tunnel.mod)
 
 pred <- expand.grid(mean_leq = quantile(tunnel_scaled$mean_leq, probs = c(0, 0.5, 1)),
@@ -1640,41 +1641,41 @@ ggarrange(Age_raw, condition_raw, mean_leq_raw, nrow = 2, ncol = 2)
 Find the best model.
 
 ```{r loud quiet stats and assumptions, eval = FALSE, message = FALSE, warning = FALSE}
-lq1 <- glmer(side ~ mean_leq * day * Age + mean_leq * day * condition + (1|ID), data = choice_lq_scaled, family = binomial)
-drop1(lq1, test = "Chisq")
-lq2 <- update(lq1, .~. -mean_leq:day:condition)
-drop1(lq2, test = "Chisq")
-lq3 <- update(lq2, .~. -day:condition)
-drop1(lq3, test = "Chisq")
-lq4 <- update(lq3, .~. -mean_leq:day:Age)
-drop1(lq4, test = "Chisq")
-lq5 <- update(lq4, .~. -mean_leq:day)
-drop1(lq5, test = "Chisq")
-lq6 <- update(lq5, .~. -day:Age)
-drop1(lq6, test = "Chisq")
-lq7 <- update(lq6, .~. -mean_leq:condition)
-drop1(lq7, test = "Chisq")
-lq8 <- update(lq7, .~. -condition)
-drop1(lq8, test = "Chisq")
-lq9 <- update(lq8, .~. -day)
-drop1(lq9, test = "Chisq")
-summary(lq9)
-MuMIn::r.squaredGLMM(lq9)
-
-lq <- glmer(side ~ mean_leq * Age + (mean_leq:Age|ID), data = choice_lq_scaled, family = binomial)
+lq <- buildmer(side ~ mean_leq * day * Age + mean_leq * day * condition + (1|ID), data = choice_lq_scaled, family = binomial) # mean_leq x age
+#lq1 <- glmer(side ~ mean_leq * day * Age + mean_leq * day * condition + (1|ID), data = choice_lq_scaled, family = binomial)
+#drop1(lq1, test = "Chisq")
+#lq2 <- update(lq1, .~. -mean_leq:day:condition)
+#drop1(lq2, test = "Chisq")
+#lq3 <- update(lq2, .~. -day:condition)
+#drop1(lq3, test = "Chisq")
+#lq4 <- update(lq3, .~. -mean_leq:day:Age)
+#drop1(lq4, test = "Chisq")
+#lq5 <- update(lq4, .~. -mean_leq:day)
+#drop1(lq5, test = "Chisq")
+#lq6 <- update(lq5, .~. -day:Age)
+#drop1(lq6, test = "Chisq")
+#lq7 <- update(lq6, .~. -mean_leq:condition)
+#drop1(lq7, test = "Chisq")
+#lq8 <- update(lq7, .~. -condition)
+#drop1(lq8, test = "Chisq")
+#lq9 <- update(lq8, .~. -day)
+#drop1(lq9, test = "Chisq")
 summary(lq)
-anova(lq9, lq, test = "Chisq") # simpler better
 
-plot(resid(lq9, type = "pearson") ~ hat(model.matrix(lq9)), las = 1, ylab = "Standardised residuals", xlab = "Leverage")
+lq <- glmer(side ~ mean_leq * Age + (1|ID), data = choice_lq_scaled, family = binomial)
+summary(lq)
+MuMIn::r.squaredGLMM(lq)
 
-model.data <- augment(lq9) %>% 
+plot(resid(lq, type = "pearson") ~ hat(model.matrix(lq)), las = 1, ylab = "Standardised residuals", xlab = "Leverage")
+
+model.data <- augment(lq) %>% 
   mutate(index = 1:n()) 
-model.data$.std.resid <- residuals(lq9, type = "deviance")
+model.data$.std.resid <- residuals(lq, type = "deviance")
 model.data %>% 
   filter(abs(.std.resid) > 3)
 #no outliers
 
-vif(lq9)
+vif(lq)
 #no multicolinearity
 ```
 
@@ -2021,17 +2022,17 @@ We may need to use polynomials for age and condition.
 Let's find the best fit model. 
 
 ```{r binomial stats, echo = FALSE, warning = FALSE, message = FALSE}
-binom_leq <- glm(side ~ mean_leq * Age + mean_leq * condition, 
-                 data = choice_scaled, family = binomial(link = "logit"))
-binom_leq2 <- glm(side ~ mean_leq * poly(Age, 2) + mean_leq * poly(condition, 2), 
-                 data = choice_scaled, family = binomial(link = "logit"))
-anova(binom_leq, binom_leq2, test = "Chisq") # both polys better
-binom_leq3 <- glm(side ~ mean_leq * poly(Age, 2) + mean_leq * condition, 
-                 data = choice_scaled, family = binomial(link = "logit"))
-anova(binom_leq2, binom_leq3, test = "Chisq") # both polys better
-binom_leq4 <- glm(side ~ mean_leq * Age + mean_leq * poly(condition, 2), 
-                 data = choice_scaled, family = binomial(link = "logit"))
-anova(binom_leq2, binom_leq4, test = "Chisq") # both polys better
+#binom_leq <- glm(side ~ mean_leq * Age + mean_leq * condition, 
+#                 data = choice_scaled, family = binomial(link = "logit"))
+#binom_leq2 <- glm(side ~ mean_leq * poly(Age, 2) + mean_leq * poly(condition, 2), 
+#                 data = choice_scaled, family = binomial(link = "logit"))
+#anova(binom_leq, binom_leq2, test = "Chisq")
+#binom_leq3 <- glm(side ~ mean_leq * poly(Age, 2) + mean_leq * condition, 
+#                 data = choice_scaled, family = binomial(link = "logit"))
+#anova(binom_leq, binom_leq3, test = "Chisq") 
+#binom_leq4 <- glm(side ~ mean_leq * Age + mean_leq * poly(condition, 2), 
+#                 data = choice_scaled, family = binomial(link = "logit"))
+#anova(binom_leq, binom_leq4, test = "Chisq") 
 
 
 binom_leq <- glm(side ~ mean_leq * poly(Age, 2) + mean_leq * poly(condition, 2), 
@@ -2543,6 +2544,8 @@ choice_part_scaled <- choice_part %>%
 
 summary(buildglmmTMB(prop_part ~ part * mean_leq * Age + part * mean_leq * condition + (1|ID), data = choice_part_scaled, family = list(family = "beta", link = "logit"))) # keep part * mean_leq * Age
 
+choice_part_scaled$ID <- factor(choice_part_scaled$ID)
+#beta_leqt <- gam(prop_part ~ part * mean_leq + part * Age + part:mean_leq:Age + s(ID, bs = "re"), data = choice_part_scaled, family = betar(link = "logit"))
 beta_leqt <- gam(prop_part ~ part * mean_leq + part * Age + part:mean_leq:Age, data = choice_part_scaled, family = betar(link = "logit"))
 anova(beta_leqt)
 summary(beta_leqt)
@@ -3772,6 +3775,25 @@ jpeg("figures/diff_origin.jpeg", width = 4, height = 4, units = "in", quality = 
 print(diff_origin)
 dev.off()
 diff_origin
+
+pred <- expand.grid(mean_leq = c(-0.8889, -0.1046, 1.3072))
+pred <- add_column(pred, fit = predict(model.beta.gam.diff, newdata = pred, type = "response"),
+                 se = predict(model.beta.gam.diff, newdata = pred, type = "response", se.fit = TRUE)$se.fit)
+
+val <- data.frame(Origin = c("Rural", "Urban"),
+                  prop_diff = c(0.4365174, 0.3114728),
+                  prop = c("72:28", "66:34"))
+
+pred$mean_leq = pred$mean_leq * sd(choice$mean_leq) + mean(choice$mean_leq)
+
+diff_leq <- ggplot() +
+  geom_point(aes(x = mean_leq, y = prop_diff), data = choice, alpha = 0.75, color = "grey20") +
+  geom_point(aes(x = mean_leq, y = fit), data = pred, size = 1.5, position = position_nudge(0.25)) +
+  geom_errorbar(aes(x = mean_leq, ymin = fit - (se * 1.), ymax = fit + (se * 1.)), data = pred, width = 0.15, position = position_nudge(0.25)) +
+  scale_y_continuous(limits = c(0, 1), breaks = c(0, 0.2, 0.5, 0.8, 1), labels = c("50:50", "60:40", "75:25", "90:10", "100:0")) +
+  xlab("Site Leq") +
+  ylab("Proportional Difference Between Sides") +
+  th 
 ```
 
 ```{r beta diff site graph, echo = FALSE,  warning = FALSE, message = FALSE, results = 'hide'}
