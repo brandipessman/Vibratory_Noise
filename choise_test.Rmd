@@ -1383,9 +1383,11 @@ tunnel2 <- tunnel %>%
 tunnel3 <- ggplot() +
     geom_ribbon(aes(x = Age, y = fit, ymin = fit - (1 * se), ymax = fit + (1 * se), group = factor(mean_leq), color = factor(mean_leq), fill = factor(mean_leq)), data = pred, alpha = 0.5) +
   geom_line(aes(x = Age, y = fit, group = factor(mean_leq), color = factor(mean_leq)), data = pred) +
-    geom_jitter(aes(x = Age, y = tunnel, color = factor(mean_leq), size = n), data = tunnel2, height = 0.1, alpha = 0.6) +
+  geom_jitter(aes(x = Age, y = tunnel, color = factor(mean_leq), size = n), data = tunnel2, height = 0.1, alpha = 0.6) +
+  geom_hline(yintercept = 0.5, linetype = 2) +
+  scale_y_continuous(limits = c(-0.2, 1.2), breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1)) +
   xlab("Age (Days Since Mature)") +
-  ylab("Proportion of Spiders Observed \nin the Tunnel") +
+  ylab("Proportion of Observations of \nSpiders in the Tunnel") +
   scale_fill_manual("Site Leq", 
                      values = c("#1b9e77", "#7570b3", "#d95f02"),
                      labels = c("-69", "-64", "-55")) +
@@ -1713,14 +1715,15 @@ spider_side <- ggplot() +
   geom_ribbon(aes(x = Age, y = fit, ymin = fit - se, ymax = fit + se, fill = factor(mean_leq)), data = pred, alpha = 0.5) +
   geom_hline(yintercept = 0.5, linetype = 2) +
   xlab("Age (Days Since Mature)") +
-  ylab("Proportion of Spiders that \nwere Found on the Loud Side") +
-  scale_y_continuous(limits = c(-0.15, 1.1), breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1)) +
+  ylab("Proportion of Observations with \nSpiders on the Loud Side") +
+  scale_y_continuous(limits = c(-0.2, 1.2), breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1)) +
   scale_fill_manual("Site Leq", 
                      values = c("#1b9e77", "#7570b3", "#d95f02"),
                      labels = c("-69", "-64", "-55")) +
   scale_color_manual("Site Leq", 
                      values = c("#1b9e77", "#7570b3", "#d95f02"),
                      labels = c("-69", "-64", "-55")) +
+  scale_size_continuous("Number of \nObservations") +
   th +
   theme(legend.position = "top", legend.box="vertical")
 
@@ -2115,21 +2118,33 @@ nd <- add_column(nd, fit = predict(binom_leq, newdata = nd, type = "response"),
 nd$Age = nd$Age * sd(choice$Age) + mean(choice$Age)
 nd$mean_leq = round(nd$mean_leq * sd(choice$mean_leq) + mean(choice$mean_leq), 0)
 
-nd %>% 
-ggplot(aes(x = Age, y = fit, group = factor(mean_leq), color = factor(mean_leq), fill = factor(mean_leq))) +
+choice2 <- choice %>% 
+  group_by(Age, mean_leq, side) %>% 
+  count()
+
+
+silk_side <- ggplot() +
+  geom_jitter(aes(x = Age, y = side, color = factor(mean_leq), size = n), data = choice2, height = 0.1, alpha = 0.5) +
+  geom_line(aes(x = Age, y = fit, group = factor(mean_leq), color = factor(mean_leq)), data = nd) +
+  geom_ribbon(aes(x = Age, y = fit, ymin = fit - se, ymax = fit + se, fill = factor(mean_leq)), data = nd, alpha = 0.5) +
   geom_hline(yintercept = 0.5, linetype = 2) +
-  geom_line() +
-  geom_ribbon(aes(ymin = fit - se, ymax = fit + se), alpha = 0.5) +
-  ylab("Proportion of Spiders") +
-  xlab("Age (days since maturation)") +
-  scale_y_continuous(limits = c(-0.05, 1.05), breaks = c(0, 0.25, 0.5, 0.75, 1)) +
+  ylab("Proportion of Silk Mass \nCollected on the Loud Side") +
+  xlab("Age (Days since Mature)") +
+  scale_y_continuous(limits = c(-0.2, 1.2), breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1)) +
   scale_fill_manual("Site Average Leq", 
-                    values = c("#1B9E77", "grey20", "#D95F02"),
+                    values = c("#1B9E77", "#7570b3", "#D95F02"),
                     labels = c("-69", "-64", "-55")) +
   scale_color_manual("Site Average Leq", 
-                    values = c("#1B9E77", "grey20", "#D95F02"),
+                    values = c("#1B9E77", "#7570b3", "#D95F02"),
                     labels = c("-69", "-64", "-55")) +
-  th
+  scale_size_continuous("Number of \nObservations") +
+  th +
+  theme(legend.position = "top", legend.box="vertical")
+
+jpeg("figures/silk_side.jpeg", width = 6.5, height = 4, units = "in", quality = 100, res = 300)
+print(silk_side)
+dev.off()
+silk_side
 ```
 
 Let's test each site separately to test the null hypothesis that there is not a majority of spiders choosing one side or the other (50%). Let's test the models with and without age and choose the best fit model.
@@ -2536,7 +2551,7 @@ summary(beta_leq_tunnel_5A)
 ```{r adding proportion silk in tunnel, echo = FALSE, warning = FALSE, message = FALSE}
 choice_part <- choice %>% 
   pivot_longer(propl_tunnel:propt_tunnel, values_to = "prop_part", names_to = "part") %>% 
-  mutate(part = fct_recode(part, "loud" = "propl_tunnel", "quiet" = "propq_tunnel", "tunnel" = "propt_tunnel"))
+  mutate(part = fct_recode(part, "Loud" = "propl_tunnel", "Quiet" = "propq_tunnel", "Tunnel" = "propt_tunnel"))
 choice_part_scaled <- choice_part %>% 
   mutate(Age = c(scale(Age)),
          mean_leq = c(scale(mean_leq)),
@@ -2549,6 +2564,11 @@ choice_part_scaled$ID <- factor(choice_part_scaled$ID)
 beta_leqt <- gam(prop_part ~ part * mean_leq + part * Age + part:mean_leq:Age, data = choice_part_scaled, family = betar(link = "logit"))
 anova(beta_leqt)
 summary(beta_leqt)
+lstrends(beta_leqt, pairwise ~ part, var = "Age", at = list(mean_leq = min(choice_part_scaled$mean_leq)))
+lstrends(beta_leqt, pairwise ~ part, var = "Age", at = list(mean_leq = median(choice_part_scaled$mean_leq)))
+lstrends(beta_leqt, pairwise ~ part, var = "Age", at = list(mean_leq = max(choice_part_scaled$mean_leq)))
+
+
 lstrends(beta_leqt, pairwise ~ part, var = "mean_leq", at = list(Age = quantile(choice_part_scaled$Age, 0.25)))
 lstrends(beta_leqt, pairwise ~ part, var = "mean_leq", at = list(Age = quantile(choice_part_scaled$Age, 0.5)))
 lstrends(beta_leqt, pairwise ~ part, var = "mean_leq", at = list(Age = quantile(choice_part_scaled$Age, 0.75)))
@@ -2749,33 +2769,82 @@ prop_site_all
 ```
 
 ```{r tunnel graph, echo = FALSE, warning = FALSE, message = FALSE, results = 'hide'}
-pred <- expand.grid(mean_leq = seq(-1, 1.4, 0.1),
-                    Age = quantile(choice_part_scaled$Age, probs = c(0.25, 0.5, 0.75)),
+#pred <- expand.grid(mean_leq = c(min(choice_part_scaled$mean_leq), median(choice_part_scaled$mean_leq), max(choice_part_scaled$mean_leq)),
+#                    Age = seq(-2.5, 2.5, 0.5),
+#                    part = levels(choice_part_scaled$part))
+#pred <- add_column(pred, fit = predict(beta_leqt, newdata = pred, type = "response"),
+#                 se = predict(beta_leqt, newdata = pred, type = "response", se.fit = TRUE)$se.fit)
+#pred$Age = round(pred$Age * sd(choice$Age) + mean(choice$Age), 0)
+#pred$mean_leq = round(pred$mean_leq * sd(choice$mean_leq) + mean(choice$mean_leq), 0)
+
+#pred$part <- factor(pred$part, levels = c("loud", "quiet", "tunnel"),
+#                  labels = c("Loud", "Quiet", "Tunnel"))
+
+#prop_silk <- ggplot() +
+#  geom_point(aes(x = Age, y = prop_part, group = factor(mean_leq), color = factor(mean_leq)), data = choice_part) +
+#  geom_line(aes(x = Age, y = fit, group = factor(mean_leq), color = factor(mean_leq)), data = pred) +
+#  geom_ribbon(aes(x = Age, y = fit, ymin = fit - se, ymax = fit + se, group = factor(mean_leq), fill = factor(mean_leq)), alpha = 0.5, data = pred) +
+#  geom_hline(yintercept = 0.5, linetype = 2) +
+#  scale_fill_manual("Site Leq", 
+#                    values = c("#1B9E77", "#7570b3", "#D95F02"),
+#                    labels = c("-69", "-64", "-55")) +
+#  scale_color_manual("Site Leq", 
+#                    values = c("#1B9E77", "#7570b3", "#D95F02"),
+#                    labels = c("-69", "-64", "-55")) +
+#  scale_y_continuous(limits = c(0, 1), breaks = c(0, 0.25, 0.5, 0.75, 1)) +
+#  xlab("Age (Days Since Mature)") +
+#  ylab("Proportion of Silk Mass") +
+#  th +
+#  theme(legend.position = "top") +
+#  facet_wrap(~part)
+
+#jpeg("figures/prop_silk.jpeg", width = 6.5, height = 4, units = "in", quality = 100, res = 300)
+#print(prop_silk)
+#dev.off()
+#prop_silk
+
+
+pred <- expand.grid(mean_leq = c(min(choice_part_scaled$mean_leq), median(choice_part_scaled$mean_leq), max(choice_part_scaled$mean_leq)),
+                    Age = seq(-2.5, 2.5, 0.5),
                     part = levels(choice_part_scaled$part))
 pred <- add_column(pred, fit = predict(beta_leqt, newdata = pred, type = "response"),
                  se = predict(beta_leqt, newdata = pred, type = "response", se.fit = TRUE)$se.fit)
 pred$Age = round(pred$Age * sd(choice$Age) + mean(choice$Age), 0)
-pred$mean_leq = pred$mean_leq * sd(choice$mean_leq) + mean(choice$mean_leq)
+pred$mean_leq = round(pred$mean_leq * sd(choice$mean_leq) + mean(choice$mean_leq), 0)
 
-choice_part2 <- choice_part %>% 
-  mutate(Age = ifelse(Age < median(Age), "15", "32"),
-         Age = as.numeric(Age))
-ggplot() +
-  geom_point(aes(x = mean_leq, y = prop_part, group = part, color = part), data = choice_part2) +
-  geom_line(aes(x = mean_leq, y = fit, group = part, color = part), data = pred) +
-  geom_ribbon(aes(x = mean_leq, y = fit, ymin = fit - (1.96 * se), ymax = fit + (1.96 * se), group = part, fill = part), alpha = 0.5, data = pred) +
-  scale_fill_manual("Part", 
-                    values = c("#D95F02", "#1B9E77", "grey20"),
+#pred$part <- factor(pred$part, levels = c("loud", "quiet", "tunnel"),
+#                  labels = c("Loud", "Quiet", "Tunnel"))
+new_labels <- c("-69" = "Site Leq: -69 dB", "-64" = "Site Leq: -64 dB", "-55" = "Site Leq: -55 dB")
+
+prop_silk <- ggplot() +
+  geom_point(aes(x = Age, y = prop_part, group = part, color = part), data = choice_part) +
+  geom_line(aes(x = Age, y = fit, group = part, color = part), data = pred) +
+  geom_ribbon(aes(x = Age, y = fit, ymin = fit - se, ymax = fit + se, group = part, fill = part), alpha = 0.5, data = pred) +
+  geom_hline(yintercept = 0.5, linetype = 2) +
+  scale_fill_manual("Chamber Part", 
+                    values = c("#e7298a", "#66a61e", "#e6ab02"),
                     labels = c("Loud", "Quiet", "Tunnel")) +
-  scale_color_manual("Part", 
-                    values = c("#D95F02", "#1B9E77", "grey20"),
+  scale_color_manual("Chamber Part", 
+                    values = c("#e7298a", "#66a61e", "#e6ab02"),
                     labels = c("Loud", "Quiet", "Tunnel")) +
   scale_y_continuous(limits = c(0, 1), breaks = c(0, 0.25, 0.5, 0.75, 1)) +
-  scale_x_continuous(breaks = c(-69, -64, -55)) +
-  xlab("Site Average Leq (dB, 20-1000 Hz)") +
-  ylab("Proportion of Silk") +
+  xlab("Age (Days Since Mature)") +
+  ylab("Proportion of Silk Mass") +
   th +
-  facet_wrap(~Age)
+  theme(legend.position = "top") +
+  facet_wrap(~ mean_leq, labeller = labeller(mean_leq = new_labels))
+
+jpeg("figures/prop_silk.jpeg", width = 6.5, height = 4, units = "in", quality = 100, res = 300)
+print(prop_silk)
+dev.off()
+prop_silk
+
+sides <- ggarrange(spider_side, silk_side, ncol = 2, common.legend = TRUE)
+final <- ggarrange(sides, prop_silk, nrow = 2) 
+jpeg("figures/final.jpeg", width = 6.5, height = 6.5, units = "in", quality = 100, res = 300)
+print(final)
+dev.off()
+final
 ```
 
 ## Total Silk Use
@@ -3856,4 +3925,87 @@ ggplot() +
   xlab("Site") +
   ylab("Proportional Difference Between Sides") +
   th
+```
+
+
+## Table 
+
+```{r stats_table, echo = FALSE, warning = FALSE, message = FALSE, results = 'hide'}
+choice_stats <- read.csv(file = "data/choice_stats.csv", header = TRUE)
+
+choice_stats <- choice_stats %>% 
+  mutate(Focal = factor(Focal),
+         Focal = fct_recode(Focal, "Spider Position" = "Spider", 
+                            "Silk Mass" = "Silk"),
+         Distribution = factor(Distibuion), 
+         Distribution = fct_recode(Distribution, "Binomial" = "binomial",
+                                   "Negative Binomial" = "neg_binom",
+                                   "Beta" = "beta"),
+         Response = factor(Data),
+         Response = fct_recode(Response, "(i) Stay (1) or Move (0)" = "stay",
+                               "(ii) Loud (1) or Quiet (0)" = "side",
+                               "(iii) Loud (1) or Quiet (0)" = "silk_side",
+                               "(iv) Total Silk Mass" = "total",
+                               "(v) Proportion of Silk Mass" = "prop"), 
+         Predictor = factor(Variable),
+         Predictor = fct_recode(Predictor, "Leq" = "leq",
+                               "Body Condition" = "condition",
+                               "Age" = "age",
+                               "Chamber Part" = "part",
+                               "Leq x Body Condition" = "leqxcond",
+                               "Leq x Age" = "leqxage",
+                               "Chamber Part x Leq" = "partxleq",
+                               "Chamber Part x Age" = "partxage",
+                               "Chamber Part x Leq x Age" = "partxleqxage"))
+
+choice_stats <- choice_stats %>% 
+  mutate(Pvalue = factor(Pvalue),
+         Pvalue = fct_recode(Pvalue, "< 0.001 ***" = "0.001",
+                        "   0.460" = "0.46",
+                        "   0.910" = "0.91",
+                        "   0.120" = "0.12",
+                        "   0.761" = "0.761",
+                        "   0.718" = "0.718",
+                        "   0.081 ." = "0.081",
+                        "   0.268" = "0.268",
+                        "   0.469" = "0.469",
+                        "   0.053 ." = "0.053",
+                        "   0.110" = "0.11",
+                        "   0.306" = "0.306",
+                        "   0.843" = "0.843",
+                        "   0.044 *" = "0.044",
+                        "   0.818" = "0.818",
+                        "   0.009 **" = "0.009")) %>% 
+  dplyr::select(Focal, Distribution, Response, Predictor, z, resid.df, Pvalue, R2)
+
+colnames(choice_stats) <- c('','Distribution','Response', 'Predictor', 'Test Statistic', 'Residual DF', 'P-Value', 'R²')
+
+flextable(noise_stats[ , 1:8]) %>% 
+  autofit() %>% 
+  merge_v(j = c('Noise Variation', 'Data (Subset by)', 'Cond. R²', 'Marg. R²'), part = "body") %>% 
+  bold(bold = TRUE, part = "header") %>% 
+  hline_bottom(part = "body", border = officer::fp_border(width = 2)) %>% 
+  border(j = 'Noise Variation', border.bottom = officer::fp_border(width = 2)) %>% 
+  hline(i = c("10"), part = "body", border = officer::fp_border(width = 2)) %>%   
+  hline(i = c("1", "4", "7", "13"), j = c("2":"8"), part = "body", border = officer::fp_border(width = 1, color = "grey")) %>%     
+  fontsize(size = 10, part = "all") %>% 
+  align(align = "center", part = "all") %>% 
+  valign(valign = "top", part = "all") %>% 
+  footnote(i = c(5:7, 14), j = 4, ref_symbols = "a", value = as_paragraph("Results from a robust linear mixed effects model")) %>% 
+    footnote(i = c(11:13), j = 4, ref_symbols = "b", value = as_paragraph("Results from a Type II Wald Chi-Squared test of a linear mixed effect model (test statistic = Chi-Squared)")) %>% 
+  save_as_image(path = here::here("figures/noise_stats_table.png"))
+
+flextable(noise_stats[ , 1:8]) %>% 
+  autofit() %>% 
+  merge_v(j = c('Noise Variation', 'Data (Subset by)', 'Cond. R²', 'Marg. R²'), part = "body") %>% 
+  bold(bold = TRUE, part = "header") %>% 
+  hline_bottom(part = "body", border = officer::fp_border(width = 2)) %>% 
+  border(j = 'Noise Variation', border.bottom = officer::fp_border(width = 2)) %>% 
+  hline(i = c("10"), part = "body", border = officer::fp_border(width = 2)) %>%   
+  hline(i = c("1", "4", "7", "13"), j = c("2":"8"), part = "body", border = officer::fp_border(width = 1, color = "grey")) %>%     
+  fontsize(size = 10, part = "all") %>% 
+  align(align = "center", part = "all") %>% 
+  valign(valign = "top", part = "all") %>% 
+  footnote(i = c(5:7, 14), j = 4, ref_symbols = "a", value = as_paragraph("Results from a robust linear mixed effects model")) %>% 
+    footnote(i = c(11:13), j = 4, ref_symbols = "b", value = as_paragraph("Results from a Type II Wald Chi-Squared test of a linear mixed effect model (test statistic = Chi-Squared)"))
 ```
