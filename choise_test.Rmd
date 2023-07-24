@@ -30,6 +30,7 @@ library(multcomp) # multiple comparisons
 library(FactoMineR) # to run PCA
 library(factoextra) # to make PCA plot
 library(corrplot) # build pca correlation plot
+library(flextable) # build tables
 
 # global theme for the graphs
 th <- theme_classic() +
@@ -1744,6 +1745,11 @@ choice_lq_8A <- choice_lq %>%
 lq_8a <- glmer(side ~ Age + (1|ID), data = choice_lq_8A, family = binomial)
 summary(lq_8a) # no diff
 
+choice_lq_rural <- choice_lq %>% 
+  filter(Site == "6C" | Site == "5A")
+lq_rural <- glmer(side ~ Age + (1|ID), data = choice_lq_rural, family = binomial)
+summary(lq_rural) # no diff
+
 choice_lq_6C <- choice_lq %>% 
   filter(Site == "6C")
 lq_6c <- glmer(side ~ Age + (1|ID), data = choice_lq_6C, family = binomial)
@@ -2564,6 +2570,8 @@ choice_part_scaled$ID <- factor(choice_part_scaled$ID)
 beta_leqt <- gam(prop_part ~ part * mean_leq + part * Age + part:mean_leq:Age, data = choice_part_scaled, family = betar(link = "logit"))
 anova(beta_leqt)
 summary(beta_leqt)
+contrast(emmeans(beta_leqt, "part"), "pairwise", adjust = "Tukey")
+
 lstrends(beta_leqt, pairwise ~ part, var = "Age", at = list(mean_leq = min(choice_part_scaled$mean_leq)))
 lstrends(beta_leqt, pairwise ~ part, var = "Age", at = list(mean_leq = median(choice_part_scaled$mean_leq)))
 lstrends(beta_leqt, pairwise ~ part, var = "Age", at = list(mean_leq = max(choice_part_scaled$mean_leq)))
@@ -2572,6 +2580,35 @@ lstrends(beta_leqt, pairwise ~ part, var = "Age", at = list(mean_leq = max(choic
 lstrends(beta_leqt, pairwise ~ part, var = "mean_leq", at = list(Age = quantile(choice_part_scaled$Age, 0.25)))
 lstrends(beta_leqt, pairwise ~ part, var = "mean_leq", at = list(Age = quantile(choice_part_scaled$Age, 0.5)))
 lstrends(beta_leqt, pairwise ~ part, var = "mean_leq", at = list(Age = quantile(choice_part_scaled$Age, 0.75)))
+
+lstrends(beta_leqt, pairwise ~ part, var = "mean_leq", at = list(Age = mean(choice_part_scaled$Age)))
+
+```
+```{r beta by site, echo = FALSE, warning = FALSE, message = FALSE}
+choice_part_8B <- choice_part %>% 
+  filter(Site == "8B")
+beta_leqt_8B <- gam(prop_part ~ part * Age, data = choice_part_8B, family = betar(link = "logit"))
+anova(beta_leqt_8B)
+contrast(emmeans(beta_leqt_8B, "part"), "pairwise", adjust = "Tukey")
+
+
+choice_part_8A <- choice_part %>% 
+  filter(Site == "8A")
+beta_leqt_8A <- gam(prop_part ~ part * Age, data = choice_part_8A, family = betar(link = "logit"))
+anova(beta_leqt_8A)
+contrast(emmeans(beta_leqt_8A, "part"), "pairwise", adjust = "Tukey")
+
+choice_part_6C <- choice_part %>% 
+  filter(Site == "6C")
+beta_leqt_6C <- gam(prop_part ~ part * Age, data = choice_part_6C, family = betar(link = "logit"))
+anova(beta_leqt_6C)
+contrast(emmeans(beta_leqt_6C, "part"), "pairwise", adjust = "Tukey")
+
+choice_part_5A <- choice_part %>% 
+  filter(Site == "5A")
+beta_leqt_5A <- gam(prop_part ~ part * Age, data = choice_part_5A, family = betar(link = "logit"))
+anova(beta_leqt_5A)
+contrast(emmeans(beta_leqt_5A, "part"), "pairwise", adjust = "Tukey")
 ```
 
 **Assumptions**
@@ -3939,6 +3976,7 @@ choice_stats <- choice_stats %>%
                             "Silk Mass" = "Silk"),
          Distribution = factor(Distibuion), 
          Distribution = fct_recode(Distribution, "Binomial" = "binomial",
+                                   "Binomial " = "binomial2", 
                                    "Negative Binomial" = "neg_binom",
                                    "Beta" = "beta"),
          Response = factor(Data),
@@ -3949,7 +3987,7 @@ choice_stats <- choice_stats %>%
                                "(v) Proportion of Silk Mass" = "prop"), 
          Predictor = factor(Variable),
          Predictor = fct_recode(Predictor, "Leq" = "leq",
-                               "Body Condition" = "condition",
+                               "Body Condition" = "cond",
                                "Age" = "age",
                                "Chamber Part" = "part",
                                "Leq x Body Condition" = "leqxcond",
@@ -3960,7 +3998,7 @@ choice_stats <- choice_stats %>%
 
 choice_stats <- choice_stats %>% 
   mutate(Pvalue = factor(Pvalue),
-         Pvalue = fct_recode(Pvalue, "< 0.001 ***" = "0.001",
+         Pvalue = fct_recode(Pvalue, " < 0.001 ***" = "0.001",
                         "   0.460" = "0.46",
                         "   0.910" = "0.91",
                         "   0.120" = "0.12",
@@ -3978,34 +4016,25 @@ choice_stats <- choice_stats %>%
                         "   0.009 **" = "0.009")) %>% 
   dplyr::select(Focal, Distribution, Response, Predictor, z, resid.df, Pvalue, R2)
 
-colnames(choice_stats) <- c('','Distribution','Response', 'Predictor', 'Test Statistic', 'Residual DF', 'P-Value', 'R²')
+colnames(choice_stats) <- c(' ','Distribution','Response', 'Predictor', 'Test Statistic', 'Residual DF', 'P-Value', 'R²')
 
-flextable(noise_stats[ , 1:8]) %>% 
+flextable(choice_stats[, 1:8]) %>% 
   autofit() %>% 
-  merge_v(j = c('Noise Variation', 'Data (Subset by)', 'Cond. R²', 'Marg. R²'), part = "body") %>% 
+  merge_v(j = c(' ', 'Distribution', 'Response', 
+                'Test Statistic', 'Residual DF', 
+                'R²'), part = "body") %>% 
+  theme_vanilla() %>% 
+  hline(i = c("1", "2", "4", "5", "7", "8", "10", "12", "13", "14", "15", "16"), 
+        j = c("Predictor", "Test Statistic", "P-Value"), 
+        part = "body", 
+        border = officer::fp_border(width = 0, color = "black")) %>% 
   bold(bold = TRUE, part = "header") %>% 
-  hline_bottom(part = "body", border = officer::fp_border(width = 2)) %>% 
-  border(j = 'Noise Variation', border.bottom = officer::fp_border(width = 2)) %>% 
-  hline(i = c("10"), part = "body", border = officer::fp_border(width = 2)) %>%   
-  hline(i = c("1", "4", "7", "13"), j = c("2":"8"), part = "body", border = officer::fp_border(width = 1, color = "grey")) %>%     
   fontsize(size = 10, part = "all") %>% 
-  align(align = "center", part = "all") %>% 
+  align(align = "left", part = "all") %>%
+  #align(j = "P-Value", align = "left", part = "body") %>% 
   valign(valign = "top", part = "all") %>% 
-  footnote(i = c(5:7, 14), j = 4, ref_symbols = "a", value = as_paragraph("Results from a robust linear mixed effects model")) %>% 
-    footnote(i = c(11:13), j = 4, ref_symbols = "b", value = as_paragraph("Results from a Type II Wald Chi-Squared test of a linear mixed effect model (test statistic = Chi-Squared)")) %>% 
-  save_as_image(path = here::here("figures/noise_stats_table.png"))
+    footnote(i = c(1), j = 5, part = "header", ref_symbols = "a", value = as_paragraph("The test statistic was a z-value for all tests except for beta regression where we provide a chi-square value.")) %>%
+  footnote(i = c(4), j = 8, ref_symbols = "b", value = as_paragraph("This test was a mixed model with spider ID as a random effect. As such, the R² value is the conditional R² The marginal R² value was 0.055.")) %>% 
+  save_as_image(path = here::here("figures/choice_stats_table.png"))
 
-flextable(noise_stats[ , 1:8]) %>% 
-  autofit() %>% 
-  merge_v(j = c('Noise Variation', 'Data (Subset by)', 'Cond. R²', 'Marg. R²'), part = "body") %>% 
-  bold(bold = TRUE, part = "header") %>% 
-  hline_bottom(part = "body", border = officer::fp_border(width = 2)) %>% 
-  border(j = 'Noise Variation', border.bottom = officer::fp_border(width = 2)) %>% 
-  hline(i = c("10"), part = "body", border = officer::fp_border(width = 2)) %>%   
-  hline(i = c("1", "4", "7", "13"), j = c("2":"8"), part = "body", border = officer::fp_border(width = 1, color = "grey")) %>%     
-  fontsize(size = 10, part = "all") %>% 
-  align(align = "center", part = "all") %>% 
-  valign(valign = "top", part = "all") %>% 
-  footnote(i = c(5:7, 14), j = 4, ref_symbols = "a", value = as_paragraph("Results from a robust linear mixed effects model")) %>% 
-    footnote(i = c(11:13), j = 4, ref_symbols = "b", value = as_paragraph("Results from a Type II Wald Chi-Squared test of a linear mixed effect model (test statistic = Chi-Squared)"))
 ```

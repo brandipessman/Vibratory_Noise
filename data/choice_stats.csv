@@ -5,9 +5,9 @@ Spider,binomial,stay,leqxcond,-1.57,65,0.120,0.038
 Spider,binomial,side,leq,0.30,244,0.761,0.655
 Spider,binomial,side,age,-0.36,244,0.718,0.655
 Spider,binomial,side,leqxage,-1.75,244,0.081,0.655
-Silk,binomial,silk_side,leq,1.11,65,0.268,0.072
-Silk,binomial,silk_side,age,-0.72,65,0.469,0.072
-Silk,binomial,silk_side,leqxage,-1.94,65,0.053,0.072
+Silk,binomial2,silk_side,leq,1.11,65,0.268,0.072
+Silk,binomial2,silk_side,age,-0.72,65,0.469,0.072
+Silk,binomial2,silk_side,leqxage,-1.94,65,0.053,0.072
 Silk,neg_binom,total,leq,-1.60,66,0.110,0.225
 Silk,neg_binom,total,age,3.94,66,0.001,0.225
 Silk,beta,prop,part,168.44,195,0.001,0.469
