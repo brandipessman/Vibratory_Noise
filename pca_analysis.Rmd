@@ -24,7 +24,7 @@ site.pca.w <- PCA(pca.w[,1:4], graph = FALSE)
 pca <- read.table("data/pca_noise.txt", header = TRUE)
 colnames(pca) <- c('Impervious','Road Distance','Traffic Distance', 'Traffic', 'Road Length', 'Traffic Impact', 'Category')
 pca <- pca %>% 
-  filter(! Category == "Forest")
+  filter(! Category == "Forest") %>% 
   mutate(Category = fct_relevel(factor(Category), "Urban", "Rural"))
 pca <- pca[, c(1, 3, 4, 5, 2, 6, 7)]
 site.pca <- PCA(pca[,1:4], graph = FALSE)
@@ -67,17 +67,17 @@ land_cover <- read.csv("data/site_land_cover.csv", header = TRUE) %>%
 land <- land_cover %>% 
 ggplot(aes(x = Site, y = Percent, fill = Land_Cover)) +
   geom_col(position = "fill") +
-  ylab("Proportion of Land Cover Class in 1 km Radius") +
+  ylab("Proportion of Land Cover \nClass in 1 km Radius") +
   scale_fill_manual("Land Cover", 
                         values = c("#666666", "#1B9E77", "#D95F02"), 
                         labels = c("Other", "Agriculture", "Urban")) +
   theme_classic() +
-  theme(text = element_text(size = 9, color = "black", family = "sans"), 
-        axis.title = element_text(size = 9, family = "sans"), 
-        axis.text = element_text(size = 6, color = "black", family = "sans"),
-        legend.position = "top")
+  theme(text = element_text(size = 10, color = "black", family = "sans"), 
+        axis.title = element_text(size = 10, family = "sans"), 
+        axis.text = element_text(size = 10, color = "black", family = "sans"),
+        legend.position = "none")
 
-jpeg("figures/land.jpeg", width = 3.25, height = 3.25, units = "in", quality = 100, res = 300)
+jpeg("figures/land.jpeg", width = 6.5, height = 2, units = "in", quality = 100, res = 300)
 print(land)
 dev.off()
 

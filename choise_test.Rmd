@@ -6,31 +6,42 @@ output:
 ---
 
 ```{r packages and theme, include = FALSE}
+# graphs
 library(tidyverse) # graphs and pipes
+library(ggpubr) # to arrange multiple plots
+#library(ggbreak) # add break in axis
+
+# stats
 library(car) # Anova test
 library(broom) # to use the augment function
-library(ggpubr) # to arrange multiple plots
-library(AER) # testing for overdispersion
-library(glmtoolbox) # test gvif
-library(betareg) # beta regressions
-library(lmtest) # to run likelihood ratio test 
-library(emmeans) # joint test of terms in a model
-library(DHARMa) # run dispersion tests
-library(knitr) # to use the kable function
-library(effects) # get predictions for single variables when interaction
+#library(betareg) # beta regressions
+#library(glmmTMB) # repeated measures beta regression
+library(buildmer) # backwards selection for lmer
 library(mgcv) # for running beta regression with gam
-library(mgcViz) # for testing dispersion of beta regression
+#library(lmtest) # to run likelihood ratio test 
+library(emmeans) # joint test of terms in a model
+library(effects) # get predictions for single variables when interaction
 library(broom.mixed) # to use augment for glm.nb
-library(ggbreak) # add break in axis
-library(glmmTMB) # repeated measures beta regression
-library(buildmer) # backwards selection for beta regression
 library(lme4) # to run glmer.nb
+library(insight) # R squared values for lmer and rlmer
 library(MASS) # negative binomial
-library(multcomp) # multiple comparisons
+#library(multcomp) # multiple comparisons
+
+# checking assumptions
+#library(AER) # testing for overdispersion
+#library(glmtoolbox) # test gvif
+#library(DHARMa) # run dispersion tests
+#library(mgcViz) # for testing dispersion of beta regression
+
+# tables
+#library(knitr) # to use the kable function
+library(flextable) # build tables
+
+
+# pca
 library(FactoMineR) # to run PCA
 library(factoextra) # to make PCA plot
 library(corrplot) # build pca correlation plot
-library(flextable) # build tables
 
 # global theme for the graphs
 th <- theme_classic() +
@@ -261,7 +272,8 @@ Let's first see if there are differences in age and body condition between sites
 #shapiro.test(choice$condition) # good
 cond_site <- lm(condition ~ Site, data = choice)
 Anova(cond_site) # trend
-summary(glht(cond_site, linfct = mcp("Site" = "Tukey"))) # no signif, 8A higher
+emmeans(cond_site, list(pairwise ~ Site), adjust = "tukey")
+#summary(glht(cond_site, linfct = mcp("Site" = "Tukey"))) # no signif, 8A higher
 #cond_leq <- lm(condition ~ factor(mean_leq), data = choice)
 #Anova(cond_leq) 
 #lsmeans(cond_leq, pairwise ~ mean_leq) # 8A higher
@@ -1667,7 +1679,12 @@ summary(lq)
 
 lq <- glmer(side ~ mean_leq * Age + (1|ID), data = choice_lq_scaled, family = binomial)
 summary(lq)
-MuMIn::r.squaredGLMM(lq)
+var.fix <- get_variance_fixed(lq)
+var.ran <- get_variance_random(lq)
+var.res <- get_variance_residual(lq)
+R2m.lq = var.fix / (var.fix + var.ran + var.res)
+R2c.lq = (var.fix + var.ran) / (var.fix + var.ran + var.res)
+#MuMIn::r.squaredGLMM(lq)
 
 plot(resid(lq, type = "pearson") ~ hat(model.matrix(lq)), las = 1, ylab = "Standardised residuals", xlab = "Leverage")
 
@@ -1716,17 +1733,18 @@ spider_side <- ggplot() +
   geom_ribbon(aes(x = Age, y = fit, ymin = fit - se, ymax = fit + se, fill = factor(mean_leq)), data = pred, alpha = 0.5) +
   geom_hline(yintercept = 0.5, linetype = 2) +
   xlab("Age (Days Since Mature)") +
-  ylab("Proportion of Observations with \nSpiders on the Loud Side") +
+  ylab("Proportion of Observations with \nSpiders in the Loud Chamber") +
   scale_y_continuous(limits = c(-0.2, 1.2), breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1)) +
-  scale_fill_manual("Site Leq", 
-                     values = c("#1b9e77", "#7570b3", "#d95f02"),
+  scale_fill_manual("Site Amplitude (Leq in dB)", 
+                     values = c("#1b9e77", "grey20", "#d95f02"),
                      labels = c("-69", "-64", "-55")) +
-  scale_color_manual("Site Leq", 
-                     values = c("#1b9e77", "#7570b3", "#d95f02"),
+  scale_color_manual("Site Amplitude (Leq in dB)", 
+                     values = c("#1b9e77", "grey20", "#d95f02"),
                      labels = c("-69", "-64", "-55")) +
   scale_size_continuous("Number of \nObservations") +
   th +
-  theme(legend.position = "top", legend.box="vertical")
+  theme(legend.position = "top", legend.box="vertical") +
+  guides(shape = guide_legend(override.aes = list(fill = "black")))
 
 jpeg("figures/spider_side.jpeg", width = 3.5, height = 3, units = "in", quality = 100, res = 300)
 print(spider_side)
@@ -1775,6 +1793,8 @@ photos_seen <- photos %>%
   mutate(seen = fct_recode(seen, "Yes" = "night_seen", "No" = "night_unseen"),
          seen = fct_relevel(seen, "No", "Yes"))
 
+new_labels <- c("8B" = "Site: 8B\nAmplitude: -55 dB", "8A" = "Site: 8A \nAmplitude: -64 dB", "6C" = "Site: 6C \nAmplitude: -69 dB", "5A" = "Site: 5A \nAmplitude: -69 dB")
+
 seen <- ggplot() +
   geom_bar(aes(y = reorder(ID, prop), x = photos, fill = seen), data = photos_seen, position = "fill", stat = "identity") +
   ylab("Spider ID") +
@@ -1783,7 +1803,7 @@ seen <- ggplot() +
   guides(fill = guide_legend(reverse = TRUE)) +
   th +
   theme(legend.position = "top") +
-  facet_grid(rows = vars(Site), scales = "free", space = 'free', switch = "y")
+  facet_grid(rows = vars(Site), scales = "free", space = 'free', switch = "y", labeller = labeller(Site = new_labels))
 
 photos_side <- photos %>% 
   mutate(prop = night_loud / (night_loud + night_quiet)) %>% 
@@ -1802,7 +1822,7 @@ side <- ggplot() +
   theme(legend.position = "top") +
   theme(axis.text.y = element_blank(),
         axis.title.y = element_blank()) +
-  facet_grid(rows = vars(Site), scales = "free", space = 'free', switch = "y")
+  facet_grid(rows = vars(Site), scales = "free", space = 'free', switch = "y", labeller = labeller(Site = new_labels))
 
 photos_night <- ggarrange(seen, side, ncol = 2, widths = c(0.55, 0.45))
 
@@ -2043,6 +2063,10 @@ Let's find the best fit model.
 #                 data = choice_scaled, family = binomial(link = "logit"))
 #anova(binom_leq, binom_leq4, test = "Chisq") 
 
+choice_scaled <- choice %>% 
+  mutate(Age = c(scale(Age)),
+         condition = c(scale(condition)),
+         mean_leq = c(scale(mean_leq)))
 
 binom_leq <- glm(side ~ mean_leq * poly(Age, 2) + mean_leq * poly(condition, 2), 
                  data = choice_scaled, family = binomial(link = "logit"))
@@ -2134,14 +2158,14 @@ silk_side <- ggplot() +
   geom_line(aes(x = Age, y = fit, group = factor(mean_leq), color = factor(mean_leq)), data = nd) +
   geom_ribbon(aes(x = Age, y = fit, ymin = fit - se, ymax = fit + se, fill = factor(mean_leq)), data = nd, alpha = 0.5) +
   geom_hline(yintercept = 0.5, linetype = 2) +
-  ylab("Proportion of Silk Mass \nCollected on the Loud Side") +
+  ylab("Proportion of Silk Mass \nCollected in the Loud Chamber") +
   xlab("Age (Days since Mature)") +
   scale_y_continuous(limits = c(-0.2, 1.2), breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1)) +
-  scale_fill_manual("Site Average Leq", 
-                    values = c("#1B9E77", "#7570b3", "#D95F02"),
+  scale_fill_manual("Site Amplitude (Leq in dB)", 
+                    values = c("#1B9E77", "grey20", "#D95F02"),
                     labels = c("-69", "-64", "-55")) +
-  scale_color_manual("Site Average Leq", 
-                    values = c("#1B9E77", "#7570b3", "#D95F02"),
+  scale_color_manual("Site Amplitude (Leq in dB)", 
+                    values = c("#1B9E77", "grey20", "#D95F02"),
                     labels = c("-69", "-64", "-55")) +
   scale_size_continuous("Number of \nObservations") +
   th +
@@ -2851,18 +2875,18 @@ pred$mean_leq = round(pred$mean_leq * sd(choice$mean_leq) + mean(choice$mean_leq
 
 #pred$part <- factor(pred$part, levels = c("loud", "quiet", "tunnel"),
 #                  labels = c("Loud", "Quiet", "Tunnel"))
-new_labels <- c("-69" = "Site Leq: -69 dB", "-64" = "Site Leq: -64 dB", "-55" = "Site Leq: -55 dB")
+new_labels <- c("-69" = "Site Amplitude: -69 dB", "-64" = "Site Amplitude: -64 dB", "-55" = "Site Amplitude: -55 dB")
 
 prop_silk <- ggplot() +
   geom_point(aes(x = Age, y = prop_part, group = part, color = part), data = choice_part) +
-  geom_line(aes(x = Age, y = fit, group = part, color = part), data = pred) +
-  geom_ribbon(aes(x = Age, y = fit, ymin = fit - se, ymax = fit + se, group = part, fill = part), alpha = 0.5, data = pred) +
+  geom_line(aes(x = Age, y = fit, group = part), color = "black", data = pred) +
+  geom_ribbon(aes(x = Age, y = fit, ymin = fit - se, ymax = fit + se, group = part, fill = part), color = "grey20", alpha = 0.5, data = pred) +
   geom_hline(yintercept = 0.5, linetype = 2) +
-  scale_fill_manual("Chamber Part", 
-                    values = c("#e7298a", "#66a61e", "#e6ab02"),
+  scale_fill_manual("Chamber", 
+                    values = c("grey0", "grey40", "grey80"),
                     labels = c("Loud", "Quiet", "Tunnel")) +
-  scale_color_manual("Chamber Part", 
-                    values = c("#e7298a", "#66a61e", "#e6ab02"),
+  scale_color_manual("Chamber", 
+                    values = c("grey0", "grey40", "grey80"),
                     labels = c("Loud", "Quiet", "Tunnel")) +
   scale_y_continuous(limits = c(0, 1), breaks = c(0, 0.25, 0.5, 0.75, 1)) +
   xlab("Age (Days Since Mature)") +
@@ -2878,7 +2902,7 @@ prop_silk
 
 sides <- ggarrange(spider_side, silk_side, ncol = 2, common.legend = TRUE)
 final <- ggarrange(sides, prop_silk, nrow = 2) 
-jpeg("figures/final.jpeg", width = 6.5, height = 6.5, units = "in", quality = 100, res = 300)
+jpeg("figures/final.jpeg", width = 6.5, height = 7, units = "in", quality = 100, res = 300)
 print(final)
 dev.off()
 final
@@ -3971,6 +3995,7 @@ ggplot() +
 choice_stats <- read.csv(file = "data/choice_stats.csv", header = TRUE)
 
 choice_stats <- choice_stats %>% 
+  filter(Distibuion != "neg_binom") %>% 
   mutate(Focal = factor(Focal),
          Focal = fct_recode(Focal, "Spider Position" = "Spider", 
                             "Silk Mass" = "Silk"),
@@ -3980,21 +4005,20 @@ choice_stats <- choice_stats %>%
                                    "Negative Binomial" = "neg_binom",
                                    "Beta" = "beta"),
          Response = factor(Data),
-         Response = fct_recode(Response, "(i) Stay (1) or Move (0)" = "stay",
-                               "(ii) Loud (1) or Quiet (0)" = "side",
-                               "(iii) Loud (1) or Quiet (0)" = "silk_side",
-                               "(iv) Total Silk Mass" = "total",
-                               "(v) Proportion of Silk Mass" = "prop"), 
+         Response = fct_recode(Response, "(iv) Stay (1) or Move (0)" = "stay",
+                               "(i) Loud (1) or Quiet (0)" = "side",
+                               "(ii) Loud (1) or Quiet (0)" = "silk_side",
+                               "(iii) Proportion of Silk Mass" = "prop"), 
          Predictor = factor(Variable),
-         Predictor = fct_recode(Predictor, "Leq" = "leq",
+         Predictor = fct_recode(Predictor, "Amplitude" = "leq",
                                "Body Condition" = "cond",
                                "Age" = "age",
-                               "Chamber Part" = "part",
-                               "Leq x Body Condition" = "leqxcond",
-                               "Leq x Age" = "leqxage",
-                               "Chamber Part x Leq" = "partxleq",
-                               "Chamber Part x Age" = "partxage",
-                               "Chamber Part x Leq x Age" = "partxleqxage"))
+                               "Chamber" = "part",
+                               "Amplitude x Body Condition" = "leqxcond",
+                               "Amplitude x Age" = "leqxage",
+                               "Chamber x Amp." = "partxleq",
+                               "Chamber x Age" = "partxage",
+                               "Chamber x Amp. x Age" = "partxleqxage"))
 
 choice_stats <- choice_stats %>% 
   mutate(Pvalue = factor(Pvalue),
@@ -4024,7 +4048,7 @@ flextable(choice_stats[, 1:8]) %>%
                 'Test Statistic', 'Residual DF', 
                 'R²'), part = "body") %>% 
   theme_vanilla() %>% 
-  hline(i = c("1", "2", "4", "5", "7", "8", "10", "12", "13", "14", "15", "16"), 
+  hline(i = c("1", "2", "4", "5", "7", "8", "9", "10", "11", "13", "14"), 
         j = c("Predictor", "Test Statistic", "P-Value"), 
         part = "body", 
         border = officer::fp_border(width = 0, color = "black")) %>% 
@@ -4034,7 +4058,7 @@ flextable(choice_stats[, 1:8]) %>%
   #align(j = "P-Value", align = "left", part = "body") %>% 
   valign(valign = "top", part = "all") %>% 
     footnote(i = c(1), j = 5, part = "header", ref_symbols = "a", value = as_paragraph("The test statistic was a z-value for all tests except for beta regression where we provide a chi-square value.")) %>%
-  footnote(i = c(4), j = 8, ref_symbols = "b", value = as_paragraph("This test was a mixed model with spider ID as a random effect. As such, the R² value is the conditional R² The marginal R² value was 0.055.")) %>% 
-  save_as_image(path = here::here("figures/choice_stats_table.png"))
+  footnote(i = c(1), j = 8, ref_symbols = "b", value = as_paragraph("This test was a mixed model with spider ID as a random effect. As such, the R² value is the conditional R² The marginal R² value was 0.055.")) %>% 
+  save_as_image(path = here::here("figures/choice_stats_table2.png"))
 
 ```
