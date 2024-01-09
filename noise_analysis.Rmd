@@ -797,7 +797,7 @@ space <- ggplot() +
   geom_ribbon(aes(x = Dim.1, ymax = response + SE, ymin = response - SE, fill = Substrate, color = Substrate), data = predictions, alpha = 0.5) +
   geom_label_repel(aes(x = Dim.1, y = mean_leq, label = mean_leq), color = "red", hjust = "right", data = highlights, size = 2) +
   xlab("Potential Traffic Impact \n(PC1, explains 70.9%)") +
-  ylab("Daily Average Amplitude (Leq in dB, 20-1000 Hz)") +
+  ylab("Daily Average Relative Amplitude \n(Leq in dB re FS, 20-1000 Hz)") +
   scale_color_manual("Substrate", values = c("grey30", "#66A61E"),
                      labels = c("Manmade", "Plant")) +
   scale_fill_manual("Substrate", values = c("grey30", "#66A61E"),
@@ -813,7 +813,7 @@ space <- ggplot() +
         legend.title = element_text(size = 8),
         panel.grid.major.y = element_line(colour = "black", linetype = "dashed", linewidth = 0.1))
 
-jpeg("figures/spatial.jpeg", width = 2.5, height = 4.5, units = "in", quality = 100, res = 300)
+jpeg("figures/spatial.jpeg", width = 2.75, height = 4.5, units = "in", quality = 100, res = 300)
 print(space)
 dev.off()
 
@@ -844,7 +844,7 @@ space_urban <- ggplot() +
   geom_line(aes(x = Dim.1, y = response, color = Substrate), data = predictions) +
   geom_ribbon(aes(x = Dim.1, ymax = response + SE, ymin = response - SE, fill = Substrate, color = Substrate), data = predictions, alpha = 0.5) +
   xlab("Potential Traffic Impact \n(PC1, explains 70.9%)") +
-  ylab("Daily Average Amplitude \n(Leq in dB, 20-1000 Hz)") +
+  ylab("Daily Average Relative Amplitude \n(Leq in dB re FS, 20-1000 Hz)") +
   scale_color_manual("Substrate", values = c("grey30", "#66A61E"),
                      labels = c("Manmade", "Plant")) +
   scale_fill_manual("Substrate", values = c("grey30", "#66A61E"),
@@ -892,7 +892,7 @@ space_rural <- ggplot() +
   geom_line(aes(x = Dim.1, y = response, color = Substrate), data = predictions) +
   geom_ribbon(aes(x = Dim.1, ymax = response + SE, ymin = response - SE, fill = Substrate, color = Substrate), data = predictions, alpha = 0.5) +
   xlab("Potential Traffic Impact \n(PC1, explains 70.9%)") +
-  ylab("Daily Average Amplitude \n(Leq in dB, 20-1000 Hz)") +
+  ylab("Daily Average Relative Amplitude \n(Leq in dB re FS, 20-1000 Hz)") +
   scale_color_manual("Substrate", values = c("grey30", "#66A61E"),
                      labels = c("Manmade", "Plant")) +
   scale_fill_manual("Substrate", values = c("grey30", "#66A61E"),
@@ -923,7 +923,7 @@ space_rural_robust <- ggplot() +
   geom_line(aes(x = Dim.1, y = fit, color = Substrate), data = predictions) +
   geom_ribbon(aes(x = Dim.1, ymax = fit + se, ymin = fit - se, fill = Substrate, color = Substrate), data = predictions, alpha = 0.5) +
   xlab("Potential Traffic Impact \n(PC1, explains 70.9%)") +
-  ylab("Daily Average Amplitude \n(Leq in dB, 20-1000 Hz)") +
+  ylab("Daily Average Relative Amplitude \n(Leq in dB re FS, 20-1000 Hz)") +
   scale_color_manual("Substrate", values = c("grey30", "#66A61E"),
                      labels = c("Manmade", "Plant")) +
   scale_fill_manual("Substrate", values = c("grey30", "#66A61E"),
@@ -972,7 +972,7 @@ space2 <- ggplot() +
   geom_ribbon(aes(x = Dim.2, ymax = response + SE, ymin = response - SE, fill = Substrate, color = Substrate), data = predictions, alpha = 0.5) +
   geom_label_repel(aes(x = Dim.2, y = mean_leq, label = mean_leq), color = "red", hjust = "right", data = highlights, size = 2) +
   xlab("Potential Traffic Impact (PC2, explains 18.3%)") +
-  ylab("Daily Average Amplitude \n(Leq in dB, 20-1000 Hz)") +
+  ylab("Daily Average Relative Amplitude \n(Leq in dB re FS, 20-1000 Hz)") +
   scale_color_manual("Substrate", values = c("grey30", "#66A61E"),
                      labels = c("Manmade", "Plant")) +
   scale_fill_manual("Substrate", values = c("grey30", "#66A61E"),
@@ -1305,7 +1305,7 @@ season <- ggplot() +
   geom_line(data = group2v3, aes(x= x, y = y, group=1), inherit.aes = F) +
   geom_label_repel(aes(x = Visit, y = mean_leq, label = mean_leq), color = "red", hjust = "right", data = highlights, size = 2) +
   xlab("Visit") +
-  ylab("Daily Average Amplitude \n(Leq in dB, 20-1000 Hz)") +
+  ylab("Daily Average Relative Amplitude \n(Leq in dB re FS, 20-1000 Hz)") +
   scale_color_manual("Category", values = c("#1B9E77", "#D95F02"),
                      labels = c("Rural", "Urban")) +
   scale_fill_manual("Category", values = c("#1B9E77", "#D95F02"),
@@ -1632,7 +1632,7 @@ raw_hourly <- ggplot() +
   geom_line(aes(x = Hour, y = mean_leq, color = Category), data = houravg, linewidth = 0.5) +
   geom_ribbon(aes(x = Hour, ymin = mean_leq - se_leq, ymax = mean_leq + se_leq, fill = Category), data = houravg, alpha = 0.5) +
   xlab("Hour of Day") +
-  ylab("Hourly Average Amplitude \n(Leq in dB, 20-1000 Hz)") +
+  ylab("Hourly Average Relative Amplitude \n(Leq in dB re FS, 20-1000 Hz)") +
   scale_color_manual("Category", values = c("#1B9E77", "#D95F02"),
                      labels = c("Rural", "Urban")) +
   scale_fill_manual("Category", values = c("#1B9E77", "#D95F02"),
@@ -1694,7 +1694,7 @@ raw_hourly_visit <- ggplot() +
   geom_line(aes(x = Hour, y = mean_leq, group = Category, color = Category), data = houravgvisit) +
   geom_ribbon(aes(x = Hour, ymin = mean_leq - se_leq, ymax = mean_leq + se_leq, fill = Category), data = houravgvisit, alpha = 0.5) +
   xlab("Hour of Day") +
-  ylab("Hourly Average Amplitude (Leq in dB, 20-1000 Hz)") +
+  ylab("Hourly Average Relative Amplitude (Leq in dB re FS, 20-1000 Hz)") +
   scale_color_manual("Category", values = c("#1B9E77", "#D95F02"),
                      labels = c("Rural", "Urban")) +
   scale_fill_manual("Category", values = c("#1B9E77", "#D95F02"),

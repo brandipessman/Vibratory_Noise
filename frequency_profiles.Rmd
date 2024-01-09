@@ -1,0 +1,274 @@
+---
+title: "frequency_profiles"
+author: "Brandi Pessman"
+date: "2023-12-06"
+output: html_document
+---
+
+```{r libraries}
+library(tidyverse)
+```
+
+```{r import}
+datapath = "/Users/bjpessman/Library/CloudStorage/OneDrive-UniversityofNebraska-Lincoln/PhD Research/Summer 2023/vibratory_noise_manuscript/field_frequencies_5_86hz"
+setwd(datapath)
+txt_files_ls = list.files(path = datapath, pattern = "*.txt")
+txt_files_df <- lapply(txt_files_ls, 
+                       function(x){
+                         read.table(file = x, header = TRUE, sep ="\t")
+                         })
+for (i in 1:length(txt_files_df)){
+  txt_files_df[[i]] <- cbind(txt_files_df[[i]],txt_files_ls[i])
+  }
+main <- do.call("rbind", lapply(txt_files_df, as.data.frame))
+main <- main %>% 
+  dplyr::select(Low.Freq..Hz., Inband.Power..dB.FS., `txt_files_ls[i]`) 
+colnames(main) <- c("Low_Freq", "Power", "File")
+main <- main %>% 
+  separate_wider_delim(cols = File, names = c("Site", "Visit", "Recorder"), "_") %>% 
+  separate_wider_delim(cols = Recorder, names = c("Recorder", "Ext"), ".") %>% 
+  dplyr::select(Site, Visit, Recorder, Low_Freq, Power)
+
+substrates <- data.frame(Locations = c("Urban", "Urban", "Urban", "Urban", 
+                                       "Urban", "Urban", "Urban", "Urban",
+                                       "Urban", "Urban", "Urban", "Urban",
+                                       "Rural", "Rural", "Rural", "Rural",
+                                       "Rural", "Rural", "Rural", "Rural",
+                                       "Rural", "Rural", "Rural", "Rural"),
+                         Site = c("8B", "8B", "8B", "8B", 
+                                  "5C", "5C", "5C", "5C", 
+                                  "4A", "4A", "4A", "4A",
+                                  "6B", "6B", "6B", "6B", 
+                                  "6C", "6C", "6C", "6C", 
+                                  "5A", "5A", "5A", "5A"),
+                         Recorder = c("r7", "r8", "r9", "r10",
+                                      "r5", "r6", "r11", "r12",
+                                      "r1", "r2", "r7", "r8",
+                                      "r3", "r4", "r9", "r10",
+                                      "r5", "r6", "r11", "r12",
+                                      "r1", "r2", "r7", "r8"),
+                         Substrate = c("Concrete", "Concrete", "Shrub", "Shrub",
+                                       "Paneling", "Shrub", "Concrete", "Shrub",
+                                       "Wood", "Shrub", "Wood", "Shrub",
+                                       "Paneling", "Herb", "Metal", "Herb", 
+                                       "Concrete", "Shrub", "Concrete", "Shrub",
+                                       "Tree", "Metal", "Tree", "Metal"),
+                         Type = c("Manmade", "Manmade", "Plant", "Plant",
+                                  "Manmade", "Plant", "Manmade", "Plant",
+                                  "Manmade", "Plant", "Manmade", "Plant",
+                                  "Manmade", "Plant", "Manmade", "Plant",
+                                  "Manmade", "Plant", "Manmade", "Plant",
+                                  "Plant", "Manmade", "Plant", "Manmade"))
+
+main <- left_join(main, substrates, by = c("Site", "Recorder"))
+```
+
+```{r main graph}
+main2 <- main %>% 
+  group_by(Site, Locations, Type, Low_Freq) %>% 
+  summarize(mean_power = mean(Power),
+            se_power = plotrix::std.error(Power)) %>% 
+  mutate(Site = factor(Site),
+         Site = fct_relevel(Site, "8B", "5C", "4A", "5A", "6C", "6B"))
+
+main2 %>% 
+  ggplot() +
+  geom_line(aes(x = Low_Freq, y = mean_power, linetype = Site, color = Locations)) +
+  geom_ribbon(aes(x = Low_Freq, ymin = mean_power - se_power, ymax = mean_power + se_power, group = Site, fill = Locations), alpha = 0.5) +
+  scale_color_manual("", values = c("#1b9e77", "#d95f02"),
+                     labels = c("Rural", "Urban")) +
+  scale_fill_manual("", values = c("#1b9e77", "#d95f02"),
+                     labels = c("Rural", "Urban")) +
+  scale_linetype_manual(values = c("solid", "longdash", "dotted", "solid", "longdash", "dotted"),
+                        labels = c("8B - loudest urban", "5C", "4A", "5A", "6C", "6B - quietest rural")) +
+  xlab("Frequency (5.86 Hz Bins)") +
+  ylab("Relative Amplitude \n(Inband Power, dB re FS)") +
+  theme_classic() +
+  theme(axis.text = element_text(family = "sans", size = 14, color = "black"),
+        axis.title = element_text(family = "sans", size = 14, color = "black"),
+        legend.text = element_text(family = "sans", size = 14, color = "black"),
+        legend.title = element_text(family = "sans", size = 14, color = "black"),
+        strip.text = element_text(family = "sans", size = 14, color = "black"),
+        legend.position = "top") +
+  guides(linetype = guide_legend(nrow = 6),
+         color = guide_legend(nrow = 2)) +
+  facet_wrap(~Type) #700 x 500
+
+main2 %>% 
+  ggplot() +
+  geom_line(aes(x = Low_Freq, y = mean_power, linetype = Site, color = Type), linewidth = 1) +
+  geom_ribbon(aes(x = Low_Freq, ymin = mean_power - se_power, ymax = mean_power + se_power, alpha = Site, fill = Type)) +
+  scale_alpha_discrete(range = c(0.5, 0.5)) +
+  scale_color_manual("", values = c("grey30", "#66A61E")) +
+  scale_fill_manual("", values = c("grey30", "#66A61E")) +
+  scale_linetype_manual(values = c("solid", "solid", "solid", "solid", "solid", "solid")) +
+  xlab("Frequency (5.86 Hz Bins)") +
+  ylab("Relative Amplitude (Inband Power, dB re FS)") +
+  theme_classic() +
+  theme(axis.text = element_text(family = "sans", size = 14, color = "black"),
+        axis.title = element_text(family = "sans", size = 14, color = "black"),
+        legend.text = element_text(family = "sans", size = 14, color = "black"),
+        legend.title = element_text(family = "sans", size = 14, color = "black"),
+        strip.text = element_text(family = "sans", size = 14, color = "black"),
+        legend.position = "top") +
+  guides(linetype = "none",
+         color = guide_legend(nrow = 1),
+         alpha = "none") +
+  facet_wrap(~Site)
+
+main3 <- main %>% 
+  filter(Type == "Manmade",
+         Low_Freq >= 20 & Low_Freq < 1000) %>% 
+  group_by(Site, Locations, Low_Freq, Recorder, Substrate) %>% 
+  summarize(mean_power = mean(Power),
+            se_power = plotrix::std.error(Power)) %>% 
+    mutate(Site = factor(Site),
+         Site = fct_relevel(Site, "8B", "5C", "4A", "5A", "6C", "6B"))
+
+main3 %>% 
+  ggplot() +
+  #geom_line(aes(x = Low_Freq, y = mean_power, linetype = Recorder, color = Substrate), linewidth = 1) +
+  geom_line(aes(x = Low_Freq, y = mean_power, color = Substrate), linetype = "solid") +
+  #geom_ribbon(aes(x = Low_Freq, ymin = mean_power - se_power, ymax = mean_power + se_power, alpha = Recorder, fill = Substrate)) +
+  scale_alpha_discrete(range = c(0.5, 0.5)) +
+  #scale_color_manual("", values = c("grey30", "#66A61E")) +
+  #scale_fill_manual("", values = c("grey30", "#66A61E")) +
+  #scale_linetype_manual(values = c("solid", "dashed", "dashed", "solid", "solid", "dashed", "solid", "dashed")) +
+  xlab("Frequency (5.86 Hz Bins)") +
+  ylab("Relative Amplitude (Inband Power, dB re FS)") +
+  theme_classic() +
+  theme(axis.text = element_text(family = "sans", size = 14, color = "black"),
+        axis.title = element_text(family = "sans", size = 14, color = "black"),
+        legend.text = element_text(family = "sans", size = 14, color = "black"),
+        legend.title = element_text(family = "sans", size = 14, color = "black"),
+        strip.text = element_text(family = "sans", size = 14, color = "black"),
+        legend.position = "top") +
+  guides(linetype = "none",
+         color = guide_legend(nrow = 1),
+         alpha = "none") +
+  facet_wrap(~Site) # 1000 x 500
+```
+
+```{r derivative graph}
+#manmade
+main_8Bm <- main2 %>% 
+  filter(Site == "8B",
+         Type == "Manmade")
+site8Bm_dY <- diff(main_8Bm$mean_power)/diff(main_8Bm$Low_Freq) 
+site8Bm_dX <- rowMeans(embed(main_8Bm$Low_Freq,2))
+derivativeData_8Bm <- data.frame(X = site8Bm_dX, Y = site8Bm_dY, type = "Derivative", Site = "8B", Location = "Urban", Type = "Manmade")
+
+main_5Cm <- main2 %>% 
+  filter(Site == "5C",
+         Type == "Manmade")
+site5Cm_dY <- diff(main_5Cm$mean_power)/diff(main_5Cm$Low_Freq) 
+site5Cm_dX <- rowMeans(embed(main_5Cm$Low_Freq,2))
+derivativeData_5Cm <- data.frame(X = site5Cm_dX, Y = site5Cm_dY, type = "Derivative", Site = "5C", Location = "Urban", Type = "Manmade")
+
+main_4Am <- main2 %>% 
+  filter(Site == "4A",
+         Type == "Manmade") 
+site4Am_dY <- diff(main_4Am$mean_power)/diff(main_4Am$Low_Freq) 
+site4Am_dX <- rowMeans(embed(main_4Am$Low_Freq,2))
+derivativeData_4Am <- data.frame(X = site4Am_dX, Y = site4Am_dY, type = "Derivative", Site = "4A", Location = "Urban", Type = "Manmade")
+
+main_5Am <- main2 %>% 
+  filter(Site == "5A",
+         Type == "Manmade") 
+site5Am_dY <- diff(main_5Am$mean_power)/diff(main_5Am$Low_Freq) 
+site5Am_dX <- rowMeans(embed(main_5Am$Low_Freq,2))
+derivativeData_5Am <- data.frame(X = site5Am_dX, Y = site5Am_dY, type = "Derivative", Site = "5A", Location = "Rural", Type = "Manmade")
+
+main_6Cm <- main2 %>% 
+  filter(Site == "6C",
+         Type == "Manmade") 
+site6Cm_dY <- diff(main_6Cm$mean_power)/diff(main_6Cm$Low_Freq) 
+site6Cm_dX <- rowMeans(embed(main_6Cm$Low_Freq,2))
+derivativeData_6Cm <- data.frame(X = site6Cm_dX, Y = site6Cm_dY, type = "Derivative", Site = "6C", Location = "Rural", Type = "Manmade")
+
+main_6Bm <- main2 %>% 
+  filter(Site == "6B",
+         Type == "Manmade") 
+site6Bm_dY <- diff(main_6Bm$mean_power)/diff(main_6Bm$Low_Freq) 
+site6Bm_dX <- rowMeans(embed(main_6Bm$Low_Freq,2))
+derivativeData_6Bm <- data.frame(X = site6Bm_dX, Y = site6Bm_dY, type = "Derivative", Site = "6B", Location = "Rural", Type = "Manmade")
+
+#plant 
+main_8Bp <- main2 %>% 
+  filter(Site == "8B",
+         Type == "Plant")
+site8Bp_dY <- diff(main_8Bp$mean_power)/diff(main_8Bp$Low_Freq) 
+site8Bp_dX <- rowMeans(embed(main_8Bp$Low_Freq,2))
+derivativeData_8Bp <- data.frame(X = site8Bp_dX, Y = site8Bp_dY, type = "Derivative", Site = "8B", Location = "Urban", Type = "Plant")
+
+main_5Cp <- main2 %>% 
+  filter(Site == "5C",
+         Type == "Plant")
+site5Cp_dY <- diff(main_5Cp$mean_power)/diff(main_5Cp$Low_Freq) 
+site5Cp_dX <- rowMeans(embed(main_5Cp$Low_Freq,2))
+derivativeData_5Cp <- data.frame(X = site5Cp_dX, Y = site5Cp_dY, type = "Derivative", Site = "5C", Location = "Urban", Type = "Plant")
+
+main_4Ap <- main2 %>% 
+  filter(Site == "4A",
+         Type == "Plant") 
+site4Ap_dY <- diff(main_4Ap$mean_power)/diff(main_4Ap$Low_Freq) 
+site4Ap_dX <- rowMeans(embed(main_4Ap$Low_Freq,2))
+derivativeData_4Ap <- data.frame(X = site4Ap_dX, Y = site4Ap_dY, type = "Derivative", Site = "4A", Location = "Urban", Type = "Plant")
+
+main_5Ap <- main2 %>% 
+  filter(Site == "5A",
+         Type == "Plant") 
+site5Ap_dY <- diff(main_5Ap$mean_power)/diff(main_5Ap$Low_Freq) 
+site5Ap_dX <- rowMeans(embed(main_5Ap$Low_Freq,2))
+derivativeData_5Ap <- data.frame(X = site5Ap_dX, Y = site5Ap_dY, type = "Derivative", Site = "5A", Location = "Rural", Type = "Plant")
+
+main_6Cp <- main2 %>% 
+  filter(Site == "6C",
+         Type == "Plant") 
+site6Cp_dY <- diff(main_6Cp$mean_power)/diff(main_6Cp$Low_Freq) 
+site6Cp_dX <- rowMeans(embed(main_6Cp$Low_Freq,2))
+derivativeData_6Cp <- data.frame(X = site6Cp_dX, Y = site6Cp_dY, type = "Derivative", Site = "6C", Location = "Rural", Type = "Plant")
+
+main_6Bp <- main2 %>% 
+  filter(Site == "6B",
+         Type == "Plant") 
+site6Bp_dY <- diff(main_6Bp$mean_power)/diff(main_6Bp$Low_Freq) 
+site6Bp_dX <- rowMeans(embed(main_6Bp$Low_Freq,2))
+derivativeData_6Bp <- data.frame(X = site6Bp_dX, Y = site6Bp_dY, type = "Derivative", Site = "6B", Location = "Rural", Type = "Plant")
+
+derivativeData <- rbind(derivativeData_8Bm, derivativeData_5Cm, derivativeData_4Am,
+                        derivativeData_5Am, derivativeData_6Cm, derivativeData_6Bm,
+                        derivativeData_8Bp, derivativeData_5Cp, derivativeData_4Ap, 
+                        derivativeData_5Ap, derivativeData_6Cp, derivativeData_6Bp) %>%
+  mutate(Site = factor(Site),
+         Site = fct_relevel(Site, "8B", "5C", "4A", "5A", "6C", "6B"))
+
+ggplot(derivativeData, aes(X,Y, group = Site, group = Site, color = Location)) + 
+  geom_line(size = 1) +
+  xlab("Frequency (5.86 Hz Bins)") +
+  ylab("First Derivative of Amplitude/Frequency") +
+  scale_color_manual("", values = c("#1b9e77", "#d95f02")) +
+  #scale_linetype_manual(values = c("solid", "longdash", "dotted", "solid", "longdash", "dotted"),
+   #                     labels = c("8B - loudest urban", "5C", "4A", "5A", "6C", "6B - quietest rural")) +
+  theme_classic() +
+  theme(axis.text = element_text(size = 14, color = "black", family = "sans"),
+        axis.title = element_text(size = 14, color = "black", family = "sans"),
+        legend.text = element_text(size = 14, color = "black", family = "sans"),
+        legend.title = element_text(size = 14, color = "black", family = "sans"),
+        strip.text = element_text(family = "sans", size = 14, color = "black")) +
+  facet_grid(Site~Type)
+
+ggplot(derivativeData, aes(X,Y, linetype = Site, color = Type)) + 
+  geom_line(size = 1) +
+  xlab("Frequency (5.86 Hz Bins)") +
+  ylab("First Derivative of Amplitude/Frequency") +
+  scale_color_manual("", values = c("grey30", "#66A61E")) +
+  scale_linetype_manual(values = c("solid", "solid", "solid", "solid", "solid", "solid")) +
+  theme_classic() +
+  theme(axis.text = element_text(size = 14, color = "black", family = "sans"),
+        axis.title = element_text(size = 14, color = "black", family = "sans"),
+        legend.text = element_text(size = 14, color = "black", family = "sans"),
+        legend.title = element_text(size = 14, color = "black", family = "sans"),
+        strip.text = element_text(family = "sans", size = 14, color = "black")) +
+  facet_wrap(~Site)
+```

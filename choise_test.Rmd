@@ -2158,7 +2158,7 @@ silk_side <- ggplot() +
   geom_line(aes(x = Age, y = fit, group = factor(mean_leq), color = factor(mean_leq)), data = nd) +
   geom_ribbon(aes(x = Age, y = fit, ymin = fit - se, ymax = fit + se, fill = factor(mean_leq)), data = nd, alpha = 0.5) +
   geom_hline(yintercept = 0.5, linetype = 2) +
-  ylab("Proportion of Silk Mass \nCollected in the Loud Chamber") +
+  ylab("Proportion of Spiders with \nMore Silk in the Loud Chamber") +
   xlab("Age (Days since Mature)") +
   scale_y_continuous(limits = c(-0.2, 1.2), breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1)) +
   scale_fill_manual("Site Amplitude (Leq in dB)", 
@@ -2608,6 +2608,7 @@ lstrends(beta_leqt, pairwise ~ part, var = "mean_leq", at = list(Age = quantile(
 lstrends(beta_leqt, pairwise ~ part, var = "mean_leq", at = list(Age = mean(choice_part_scaled$Age)))
 
 ```
+
 ```{r beta by site, echo = FALSE, warning = FALSE, message = FALSE}
 choice_part_8B <- choice_part %>% 
   filter(Site == "8B")
@@ -4058,7 +4059,7 @@ flextable(choice_stats[, 1:8]) %>%
   #align(j = "P-Value", align = "left", part = "body") %>% 
   valign(valign = "top", part = "all") %>% 
     footnote(i = c(1), j = 5, part = "header", ref_symbols = "a", value = as_paragraph("The test statistic was a z-value for all tests except for beta regression where we provide a chi-square value.")) %>%
-  footnote(i = c(1), j = 8, ref_symbols = "b", value = as_paragraph("This test was a mixed model with spider ID as a random effect. As such, the R² value is the conditional R² The marginal R² value was 0.055.")) %>% 
+  footnote(i = c(1), j = 8, ref_symbols = "b", value = as_paragraph("This test was a mixed model with spider ID as a random effect. As such, the R² value is the conditional R². The marginal R² value was 0.055.")) %>% 
   save_as_image(path = here::here("figures/choice_stats_table2.png"))
 
 ```
