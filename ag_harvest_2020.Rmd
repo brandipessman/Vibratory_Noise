@@ -84,8 +84,8 @@ p2 <- ggplot() +
                      labels = c("Corn", "Soybeans", "Mean")) +
   scale_x_date(date_labels = "%b %d", limits = as.Date(c("2020-08-02", "2020-10-25")), breaks = as.Date(c("2020-08-03", "2020-08-31", "2020-09-22", "2020-10-12", "2020-10-23"))) +
   scale_y_continuous(limits = c(0, 30), breaks = c(0, 5, 10, 15, 20, 25, 30)) +
-  xlab("Date (Weeks)") +
-  ylab("Percent Harvested per Week") +
+  xlab("Date (weeks)") +
+  ylab("% harvested per week") +
   theme_classic() +
   theme(legend.key.size = unit(0.5, "cm"),
         text = element_text(size = 10), 
@@ -94,10 +94,11 @@ p2 <- ggplot() +
         legend.text = element_text(size = 6, color = "black", family = "sans"),
         legend.title = element_text(size = 6, color = "black", family = "sans"),
         legend.position = c(0.21, 0.7),
-        legend.background = element_rect(fill="grey95",
-                                  linewidth=0.5, linetype="solid", 
-                                  colour ="black"),
-        panel.grid.major.x = element_line(colour = "black", linetype = "dashed", size = 0.1)) +
+        # legend.background = element_rect(fill="grey95",
+        #                           linewidth=0.5, linetype="solid", 
+        #                           colour ="black"),
+         panel.grid.major.x = element_line(colour = "black", linetype = "dashed", size = 0.1)
+        ) +
   annotate(geom = "text", x = as.Date("2020-08-16"), y = 30, label = "Visit 1", color = "black", size = 3) +
   annotate(geom = "text", x = as.Date("2020-09-11"), y = 30, label = "Visit 2", color = "black", size = 3) +
   annotate(geom = "text", x = as.Date("2020-10-02"), y = 30, label = "Visit 3", color = "black", size = 3) +

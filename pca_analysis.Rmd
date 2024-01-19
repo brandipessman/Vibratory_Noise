@@ -67,8 +67,8 @@ land_cover <- read.csv("data/site_land_cover.csv", header = TRUE) %>%
 land <- land_cover %>% 
 ggplot(aes(x = Site, y = Percent, fill = Land_Cover)) +
   geom_col(position = "fill") +
-  ylab("Proportion of Land Cover \nClass in 1 km Radius") +
-  scale_fill_manual("Land Cover", 
+  ylab("Proportion of land cover \nclass in 1-km radius") +
+  scale_fill_manual("Land cover", 
                         values = c("#666666", "#1B9E77", "#D95F02"), 
                         labels = c("Other", "Agriculture", "Urban")) +
   theme_classic() +

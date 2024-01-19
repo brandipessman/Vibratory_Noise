@@ -1732,8 +1732,8 @@ spider_side <- ggplot() +
   geom_line(aes(x = Age, y = fit, color = factor(mean_leq)), data = pred) +
   geom_ribbon(aes(x = Age, y = fit, ymin = fit - se, ymax = fit + se, fill = factor(mean_leq)), data = pred, alpha = 0.5) +
   geom_hline(yintercept = 0.5, linetype = 2) +
-  xlab("Age (Days Since Mature)") +
-  ylab("Proportion of Observations with \nSpiders in the Loud Chamber") +
+  xlab("Age (days since mature)") +
+  ylab("Proportion of observations with \nspiders in the loud chamber") +
   scale_y_continuous(limits = c(-0.2, 1.2), breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1)) +
   scale_fill_manual("Site Amplitude (Leq in dB)", 
                      values = c("#1b9e77", "grey20", "#d95f02"),
@@ -2158,8 +2158,8 @@ silk_side <- ggplot() +
   geom_line(aes(x = Age, y = fit, group = factor(mean_leq), color = factor(mean_leq)), data = nd) +
   geom_ribbon(aes(x = Age, y = fit, ymin = fit - se, ymax = fit + se, fill = factor(mean_leq)), data = nd, alpha = 0.5) +
   geom_hline(yintercept = 0.5, linetype = 2) +
-  ylab("Proportion of Spiders with \nMore Silk in the Loud Chamber") +
-  xlab("Age (Days since Mature)") +
+  ylab("Proportion of spiders with \nmore silk in the loud chamber") +
+  xlab("Age (days since mature)") +
   scale_y_continuous(limits = c(-0.2, 1.2), breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1)) +
   scale_fill_manual("Site Amplitude (Leq in dB)", 
                     values = c("#1B9E77", "grey20", "#D95F02"),
@@ -2890,8 +2890,8 @@ prop_silk <- ggplot() +
                     values = c("grey0", "grey40", "grey80"),
                     labels = c("Loud", "Quiet", "Tunnel")) +
   scale_y_continuous(limits = c(0, 1), breaks = c(0, 0.25, 0.5, 0.75, 1)) +
-  xlab("Age (Days Since Mature)") +
-  ylab("Proportion of Silk Mass") +
+  xlab("Age (days since mature)") +
+  ylab("Proportion of silk mass") +
   th +
   theme(legend.position = "top") +
   facet_wrap(~ mean_leq, labeller = labeller(mean_leq = new_labels))
