@@ -5,6 +5,8 @@ date: "2024-10-01"
 output: html_document
 ---
 
+**Disclaimer:** *These files will not run on any computer besides the owner's because the files that the code is pulling from is only found locally. Other code files will still work because the outputs of this file are all saved.*
+
 # Load Libraries
 
 ```{r libraries}
