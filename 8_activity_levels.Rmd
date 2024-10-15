@@ -1,0 +1,346 @@
+---
+title: "Activity Monitoring"
+author: "Brandi Pessman"
+date: "2024-10-03"
+output: html_document
+---
+
+# Load Libraries
+
+```{r libraries}
+library(tidyverse) # for wrangling and graphs
+library(MASS) # for glm.nb
+library(ggpubr) # for ggarrange
+library(broom) # for augment
+
+th <- theme_classic() +
+  theme(text = element_text(size = 11, color = "black"),
+        axis.text = element_text(size = 10, color = "black"),
+        axis.title = element_text(size = 11, color = "black"),
+        legend.text = element_text(size = 10, color = "black"),
+        legend.title = element_text(size = 11, color = "black"))
+```
+
+# Import Data
+
+```{r import}
+activity <- readRDS("wrangled_data/activity.rds")
+activity_peak <- readRDS("wrangled_data/activity_peak.rds")
+activity_total <- readRDS("wrangled_data/activity_total.rds")
+photo_night_peaks <- readRDS("wrangled_data/photo_night_peaks.rds")
+photo_night_total <- readRDS("wrangled_data/photo_night_total.rds")
+photos_seen <- readRDS("wrangled_data/photos_seen.rds")
+photos_side <- readRDS("wrangled_data/photos_side.rds")
+activity_hours <- readRDS("wrangled_data/activity_hours.rds")
+
+dark_activity <- data.frame(PeakHour = c(seq(0, 23.5, 0.5))) %>% 
+  mutate(lights_out = ifelse(PeakHour<11, 25, 0))
+
+dark_choice <- dark_activity %>% 
+  mutate(lights_out = ifelse(PeakHour<11, 3, 0))
+```
+
+# Activity Monitor
+
+## Peak Activity
+
+```{r activity monitor peak}
+ggplot() +
+  geom_col(aes(x = PeakHour, y = lights_out), width = 1, position = "identity", fill = "grey60", color = "grey60", data = dark_activity) +
+  geom_bar(aes(x = PeakHour, fill = Site), data = activity_peak, width = 1, color = "black", position = "identity") +
+  coord_polar(start = 1.7 * pi) +
+  scale_x_continuous(limits = c(0, 24), breaks = seq(0, 23, 1)) +
+  scale_fill_manual("", values = c("#7570b3","#d95f02"),
+                     breaks = c("Forest", "Campus"),
+                    labels = c("Forest", "Campus")) +
+  xlab("Time of Peak Activity (Hours Since Lights Off)") +
+  ylab("Number of Observations \nAcross 5 Days\n") +
+  theme_linedraw() +
+  theme(axis.title = element_text(family = "Arial", size = 12, color = "black"),
+        axis.text = element_text(family = "Arial", size = 12, color = "black"),
+        legend.text = element_text(family = "Arial", size = 12, color = "black"),  
+        legend.title = element_text(family = "Arial", size = 12, color = "black"),
+        legend.position = "top", 
+        legend.background = element_rect(colour = 'black', fill = 'white', linetype='solid')) +
+  facet_wrap(~Site)
+```
+
+## Total Activity
+
+### Statistical Analysis
+
+```{r activity total stats}
+# Linear model
+shapiro.test(activity_total$TotalActivity) # not normal
+act.lm <- lm(TotalActivity ~ Site + Sex, data = activity_total)
+summary(act.lm)
+
+# Poisson
+act.glm <- glm(TotalActivity ~ Site + Sex, data = activity_total, family = "poisson")
+summary(act.glm)
+
+# Negative binomial
+act.glm.nb <- glm.nb(TotalActivity ~ Site + Sex, data = activity_total)
+summary(act.glm.nb)
+```
+
+### Raw and Prediction Graphs
+
+```{r activity total graphs}
+# Raw
+activity_total_raw <- activity_total %>% 
+  group_by(Site, Sex) %>% 
+  summarize(mean = mean(TotalActivity),
+            se = plotrix::std.error(TotalActivity))
+
+raw_data <- ggplot() +
+  geom_jitter(aes(x = Site, y = TotalActivity, group = Sex, color = Sex), data = activity_total, alpha = 0.5, width = 0.25) +
+  geom_point(aes(x = Site, y = mean, group = Sex, color = Sex), data = activity_total_raw, position=position_dodge(width=0.25)) +
+  geom_line(aes(x = Site, y = mean, group = Sex, color = Sex), data = activity_total_raw, position=position_dodge(width=0.25)) +
+  geom_errorbar(aes(x = Site, ymin = mean - se, ymax = mean + se, group = Sex, color = Sex), data = activity_total_raw, position = "dodge", width = 0.25) +
+  scale_color_manual(values = c("#e7298a", "#66a61e")) +
+  ylab("Total Activity \n(Total Number of Laser Breaks)") +
+  xlab("Site") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 12, color = "black"),
+        axis.title = element_text(size = 12, color = "black"),
+        legend.text = element_text(size = 12, color = "black")) +
+  ggtitle("Raw")
+
+# Linear Model
+nd <- expand.grid(Site = levels(factor(activity_total$Site)),
+                  Sex = levels(factor(activity_total$Sex)))
+pred <- augment(act.lm, newdata = nd, re.form = NA, se_fit = TRUE, type = "response")
+
+lm_data <- ggplot() +
+  geom_jitter(aes(x = Site, y = TotalActivity, group = Sex, color = Sex), data = activity, alpha = 0.5, width = 0.25) +
+  geom_point(aes(x = Site, y = .fitted, group = Sex, color = Sex), data = pred, position=position_dodge(width=0.25)) +
+  geom_line(aes(x = Site, y = .fitted, group = Sex, color = Sex), data = pred, position=position_dodge(width=0.25)) +
+  geom_errorbar(aes(x = Site, ymin = .fitted - .se.fit, ymax = .fitted + .se.fit, group = Sex, color = Sex), data = pred, position = "dodge", width = 0.25) +
+  scale_color_manual(values = c("#e7298a", "#66a61e")) +
+  ylab("Total Activity \n(Total Number of Laser Breaks)") +
+  xlab("Site") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 12, color = "black"),
+        axis.title = element_text(size = 12, color = "black"),
+        legend.text = element_text(size = 12, color = "black")) +
+  ggtitle("LM")
+
+# Poisson
+nd <- expand.grid(Site = levels(factor(activity_total$Site)),
+                  Sex = levels(factor(activity_total$Sex)))
+pred <- augment(act.glm, newdata = nd, re.form = NA, se_fit = TRUE, type.predict = "response")
+
+glm_data <- ggplot() +
+  geom_jitter(aes(x = Site, y = TotalActivity, group = Sex, color = Sex), data = activity, alpha = 0.5, width = 0.25) +
+  geom_point(aes(x = Site, y = .fitted, group = Sex, color = Sex), data = pred, position=position_dodge(width=0.25)) +
+  geom_line(aes(x = Site, y = .fitted, group = Sex, color = Sex), data = pred, position=position_dodge(width=0.25)) +
+  geom_errorbar(aes(x = Site, ymin = .fitted - .se.fit, ymax = .fitted + .se.fit, group = Sex, color = Sex), data = pred, position = "dodge", width = 0.25) +
+  scale_color_manual(values = c("#e7298a", "#66a61e")) +
+  ylab("Total Activity \n(Total Number of Laser Breaks)") +
+  xlab("Site") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 12, color = "black"),
+        axis.title = element_text(size = 12, color = "black"),
+        legend.text = element_text(size = 12, color = "black")) +
+  ggtitle("Poisson")
+
+# Negative binomial
+pred <- expand.grid(Site = levels(factor(activity_total$Site)),
+                  Sex = levels(factor(activity_total$Sex)))
+pred$fit <- predict(act.glm.nb, pred, type = "response", se.fit = TRUE)$fit
+pred$se.fit <- predict(act.glm.nb, pred, type = "response", se.fit = TRUE)$se.fit
+
+glm.nb_data <- ggplot() +
+  geom_jitter(aes(x = Site, y = TotalActivity, group = Sex, color = Sex), data = activity, alpha = 0.5, width = 0.25) +
+  geom_point(aes(x = Site, y = fit, group = Sex, color = Sex), data = pred, position=position_dodge(width=0.25)) +
+  geom_line(aes(x = Site, y = fit, group = Sex, color = Sex), data = pred, position=position_dodge(width=0.25)) +
+  geom_errorbar(aes(x = Site, ymin = fit - se.fit, ymax = fit + se.fit, group = Sex, color = Sex), data = pred, position = "dodge", width = 0.25) +
+  scale_color_manual(values = c("#e7298a", "#66a61e")) +
+  ylab("Total Activity \n(Total Number of Laser Breaks)") +
+  xlab("Site") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 12, color = "black"),
+        axis.title = element_text(size = 12, color = "black"),
+        legend.text = element_text(size = 12, color = "black")) +
+  ggtitle("Neg. Binom.")
+
+ggarrange(raw_data, lm_data, glm_data, glm.nb_data, ncol = 2, nrow = 2, common.legend = TRUE)
+```
+
+# Choice Photo Activity
+
+## Loud/Quiet Side
+
+```{r photos proportiion loud/quiet}
+new_labels <- c("8B" = "Site: 8B\nAmplitude: -55 dB", "8A" = "Site: 8A \nAmplitude: -64 dB", "6C" = "Site: 6C \nAmplitude: -69 dB", "5A" = "Site: 5A \nAmplitude: -69 dB")
+
+seen <- ggplot() +
+  geom_bar(aes(y = reorder(ID, prop), x = photos, fill = seen), data = photos_seen, position = "fill", stat = "identity") +
+  ylab("Spider ID") +
+  xlab("Proportion of \nNight Photos") +
+  scale_fill_manual("", values = c("grey", "#7570b3"), labels = c("Unseen", "Visible")) +
+  guides(fill = guide_legend(reverse = TRUE)) +
+  th +
+  theme(legend.position = "top") +
+  facet_grid(rows = vars(Site), scales = "free", space = 'free', switch = "y", labeller = labeller(Site = new_labels))
+
+side <- ggplot() +
+  geom_bar(aes(y = reorder(ID, prop), x = photos, fill = side), data = photos_side, position = "fill", stat = "identity") +
+  geom_vline(xintercept = 0.5, linetype = "dashed") +
+  ylab("Spider ID") +
+  xlab("Proportion of Night \nPhotos with Spider Visible") +
+  scale_fill_manual("", values = c("#1b9e77", "#d95f02"), labels = c("Quiet", "Loud")) +
+  guides(fill = guide_legend(reverse = TRUE)) +
+  th +
+  theme(legend.position = "top") +
+  theme(axis.text.y = element_blank(),
+        axis.title.y = element_blank()) +
+  facet_grid(rows = vars(Site), scales = "free", space = 'free', switch = "y", labeller = labeller(Site = new_labels))
+
+ggarrange(seen, side, ncol = 2, widths = c(0.55, 0.45))
+```
+
+## Hourly Activity
+
+```{r photos hourly activity}
+colors <- c("Urban" = "#d95f02", "Rural" = "#1b9e77")
+
+activity_graph <- ggplot() +
+  geom_rect(aes(xmin = 0, xmax = 8, ymin = 0, ymax = 11), fill = "grey") +
+  geom_rect(aes(xmin = 20, xmax = 23, ymin = 0, ymax = 11), fill = "grey") +
+  geom_line(aes(x = hour, y = Loud, group = 1), color = "#d95f02", data = activity_hours) +
+  geom_line(aes(x = hour, y = Quiet, group = 1), color = "#1b9e77", data = activity_hours) +
+  geom_area(aes(x = hour, y = Loud, group = 1, fill = "Urban"), data = activity_hours, alpha = 0.5) +
+  geom_area(aes(x = hour, y = Quiet, group = 1, fill = "Rural"), data = activity_hours, alpha = 0.5) +
+  xlab("Hour of the Day") +
+  ylab("Average Number of Photos \nwith Position Change") +
+  scale_x_continuous(limits = c(0, 23), breaks = seq(0, 23, 2), expand = c(0,0)) +
+  scale_y_continuous(limits = c(0, 11), breaks = seq(0, 10, 2), expand = c(0,0)) +
+  scale_fill_manual("Origin", values = c("Urban" = "#d95f02", "Rural" = "#1b9e77")) +
+  guides(fill = guide_legend(reverse = TRUE)) +
+  th +
+  theme(legend.position = "top")
+```
+
+## Peak Activity
+
+```{r photos peak graph}
+ggplot() +
+  geom_col(aes(x = PeakHour, y = lights_out), width = 1, position = "identity", fill = "grey60", color = "grey60", data = dark_choice) +
+  geom_bar(aes(x = PeakHour, fill = Origin), data = photo_night_peaks, width = 1, color = "black", position = "identity") +
+  coord_polar(start = 1.7 * pi) +
+  scale_x_continuous(limits = c(0, 24), breaks = seq(0, 23, 1)) +
+  scale_fill_manual("", values = c("#1b9e77", "#d95f02"),
+                     breaks = c("Rural", "Urban"),
+                    labels = c("Rural", "Urban")) +
+  xlab("Time of Peak Activity (Hours Since Lights Off)") +
+  ylab("Number of Observations \nAcross First Night\n") +
+  theme_linedraw() +
+  theme(axis.title = element_text(family = "Arial", size = 12, color = "black"),
+        axis.text = element_text(family = "Arial", size = 12, color = "black"),
+        legend.text = element_text(family = "Arial", size = 12, color = "black"),  
+        legend.title = element_text(family = "Arial", size = 12, color = "black"),
+        legend.position = "top",
+        legend.background = element_rect(colour = 'black', fill = 'white', linetype='solid')) +
+  facet_wrap(~Origin)
+```
+
+## Total Activity
+
+### Statistical Analysis
+
+```{r photos total stats}
+# Linear model
+shapiro.test(photo_night_total$TotalActivity) # not normal
+photo.lm <- lm(TotalActivity ~ Origin, data = photo_night_total)
+summary(photo.lm)
+
+# Poisson
+photo.glm <- glm(TotalActivity ~ Origin, data = photo_night_total, family = "poisson")
+summary(photo.glm)
+
+# Negative binomial
+photo.glm.nb <- glm.nb(TotalActivity ~ Origin, data = photo_night_total)
+summary(photo.glm.nb)
+```
+
+### Raw and Prediction Graphs
+
+```{r photos total graphs}
+photo_night_total_raw <- photo_night_total %>% 
+  group_by(Origin) %>% 
+  summarize(mean = mean(TotalActivity),
+            se = plotrix::std.error(TotalActivity))
+
+raw_data_photos <- ggplot() +
+  geom_jitter(aes(x = Origin, y = TotalActivity, color = Origin), data = photo_night_total, alpha = 0.5, width = 0.25, size = 2) +
+  geom_point(aes(x = Origin, y = mean, color = Origin), data = photo_night_total_raw, position=position_dodge(width=0.25), size = 3) +
+  geom_line(aes(x = Origin, y = mean, group = 1), data = photo_night_total_raw, position=position_dodge(width=0.25)) +
+  geom_errorbar(aes(x = Origin, ymin = mean - se, ymax = mean + se, group = Origin, color = Origin), data = photo_night_total_raw, position = "dodge", width = 0.25, linewidth = 1) +
+  scale_color_manual(values = c("#1b9e77", "#d95f02")) +
+  ylab("Total Activity \n(Total Number of Photos)") +
+  xlab("Site") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 12, color = "black"),
+        axis.title = element_text(size = 12, color = "black"),
+        legend.text = element_text(size = 12, color = "black")) +
+  ggtitle("Raw")
+
+# Linear model
+nd <- expand.grid(Origin = levels(factor(photo_night_total$Origin)))
+pred <- augment(photo.lm, newdata = nd, re.form = NA, se_fit = TRUE, type = "response")
+
+lm_data_photos <-  ggplot() +
+  geom_jitter(aes(x = Origin, y = TotalActivity, color = Origin), data = photo_night_total, alpha = 0.5, width = 0.25, size = 2) +
+  geom_point(aes(x = Origin, y = .fitted, color = Origin), data = pred, position=position_dodge(width=0.25), size = 3) +
+  geom_line(aes(x = Origin, y = .fitted, group = 1), data = pred, position=position_dodge(width=0.25)) +
+  geom_errorbar(aes(x = Origin, ymin = .fitted - .se.fit, ymax = .fitted + .se.fit, group = Origin, color = Origin), data = pred, position = "dodge", width = 0.25, linewidth = 1) +
+  scale_color_manual(values = c("#1b9e77", "#d95f02")) +
+  ylab("Total Activity \n(Total Number of Photos)") +
+  xlab("Site") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 12, color = "black"),
+        axis.title = element_text(size = 12, color = "black"),
+        legend.text = element_text(size = 12, color = "black")) +
+  ggtitle("LM")
+
+# Poisson
+nd <- expand.grid(Origin = levels(factor(photo_night_total$Origin)))
+pred <- augment(photo.glm, newdata = nd, re.form = NA, se_fit = TRUE, type.predict = "response")
+
+glm_data_photos <-  ggplot() +
+  geom_jitter(aes(x = Origin, y = TotalActivity, color = Origin), data = photo_night_total, alpha = 0.5, width = 0.25, size = 2) +
+  geom_point(aes(x = Origin, y = .fitted, color = Origin), data = pred, position=position_dodge(width=0.25), size = 3) +
+  geom_line(aes(x = Origin, y = .fitted, group = 1), data = pred, position=position_dodge(width=0.25)) +
+  geom_errorbar(aes(x = Origin, ymin = .fitted - .se.fit, ymax = .fitted + .se.fit, group = Origin, color = Origin), data = pred, position = "dodge", width = 0.25, linewidth = 1) +
+  scale_color_manual(values = c("#1b9e77", "#d95f02")) +
+  ylab("Total Activity \n(Total Number of Photos)") +
+  xlab("Site") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 12, color = "black"),
+        axis.title = element_text(size = 12, color = "black"),
+        legend.text = element_text(size = 12, color = "black")) +
+  ggtitle("Poisson")
+
+# Negative Binomial
+pred <- expand.grid(Origin = levels(factor(photo_night_total$Origin)))
+pred$fit <- predict(photo.glm.nb, pred, type = "response", se.fit = TRUE)$fit
+pred$se.fit <- predict(photo.glm.nb, pred, type = "response", se.fit = TRUE)$se.fit
+
+glm.nb_data_photos <- ggplot() +
+  geom_jitter(aes(x = Origin, y = TotalActivity, color = Origin), data = photo_night_total, alpha = 0.5, width = 0.25, size = 2) +
+  geom_point(aes(x = Origin, y = fit, color = Origin), data = pred, position=position_dodge(width=0.25), size = 3) +
+  geom_line(aes(x = Origin, y = fit, group = 1), data = pred, position=position_dodge(width=0.25)) +
+  geom_errorbar(aes(x = Origin, ymin = fit - se.fit, ymax = fit + se.fit, group = Origin, color = Origin), data = pred, position = "dodge", width = 0.25, linewidth = 1) +
+  scale_color_manual(values = c("#1b9e77", "#d95f02")) +
+  ylab("Total Activity \n(Total Number of Photos)") +
+  xlab("Site") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 12, color = "black"),
+        axis.title = element_text(size = 12, color = "black"),
+        legend.text = element_text(size = 12, color = "black")) +
+  ggtitle("Neg.Binom")
+
+ggarrange(raw_data_photos, lm_data_photos, glm_data_photos, glm.nb_data_photos, ncol = 2, nrow = 2, common.legend = TRUE)
+```

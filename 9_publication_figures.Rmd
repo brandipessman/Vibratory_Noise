@@ -1,0 +1,1175 @@
+---
+title: "Publication Figures"
+author: "Brandi Pessman"
+date: "2024-10-04"
+output: html_document
+---
+
+# Load Libraries
+
+```{r libraries}
+library(tidyverse)
+library(ggmap) # making maps
+library(ggsn) # add scale bar
+library(ggrepel) # to use geom_label_repel
+library(viridis) # to use scale_fill_viridis
+library(lme4) # for mixed models
+library(effects) # graphs of rlmer results
+library(robustlmm) # to run rlmer
+library(mgcv) # gam
+library(ggpubr) # ggarrange
+library(FactoMineR) # to run PCA
+library(factoextra) # to make PCA plot
+library(corrplot) # build pca correlation plot
+library(ggExtra) # for removeGrid
+library(flextable) # build stats table
+library(MASS) #to run glm.nb
+
+# global theme for the graphs
+th <- theme_classic() +
+  theme(text = element_text(size = 11, color = "black"),
+        axis.text = element_text(size = 10, color = "black"),
+        axis.title = element_text(size = 11, color = "black"),
+        legend.text = element_text(size = 10, color = "black"),
+        legend.title = element_text(size = 11, color = "black"))
+
+formatter1000 <- function(){
+  function(x)x/1000
+}
+```
+
+# Import Data
+
+```{r import}
+# Figure 1
+land_cover <- read.csv("data/site_land_cover.csv", header = TRUE) %>%
+  mutate(Site = factor(Site),
+         Site = fct_relevel(Site, "7A", "5A", "6B", "6C", "6A", "7B", "3B", "2C", "1A", "3C", "1B", "2A", "2B", "4C", "8A", "7C", "5B", "5C", "3A", "1C", "4A", "4B", "8B"),
+         Land_Cover = factor(Land_Cover),
+         Land_Cover = fct_relevel(Land_Cover, "Other", "Agriculture", "Urban"))
+
+# Figure 2
+vibration_map <- readRDS("wrangled_data/vibration_map.rds")
+
+# Figure 3
+lincoln <- data.frame(read.table("data/lincoln_coordinates.txt", sep = "," , header = F)) %>% 
+  slice(10:2350) %>% 
+  separate(V1, c("extra", "longitude", "latitude"), " ") %>% 
+  mutate(longitude = as.numeric(longitude),
+         latitude = as.numeric(latitude))
+
+sites <- read.csv("data/site_coordinates.csv", header = TRUE) %>% 
+  mutate(Site = Sites, .keep = "unused") %>%
+  full_join(readRDS("wrangled_data/siteavgl.rds"), by = "Site") %>% 
+  mutate(mean_leq = round(mean_leq),
+         med_leq = round(med_leq)) %>% 
+  mutate(choice = ifelse(Site == "8A" | Site == "8B", "Urban", 
+                         ifelse(Site == "5A" | Site == "6C", "Rural", "Other")),
+         choice = factor(choice),
+         choice = fct_relevel(choice, "Rural", "Urban", "Other"))
+
+dayavgl <- readRDS("wrangled_data/dayavgl.rds")
+
+dayavgl_rural <- dayavgl %>% 
+  filter(Category == "Rural")
+
+dayavgl_urban <- dayavgl %>% 
+  filter(Category == "Urban")
+
+spatial_dayavgl <- dayavgl %>% 
+  ungroup() %>% 
+  dplyr::select(Site, Category, Substrate, Dim.1, Dim.2, mean_leq) %>% 
+  group_by(Site, Substrate, Category, Dim.1, Dim.2) %>% 
+  summarize(mean = mean(mean_leq),
+            sd = sd(mean_leq))
+
+spatial_dayavgl_r <- spatial_dayavgl %>% 
+  filter(Category == "Rural")
+
+spatial_dayavgl_u <- spatial_dayavgl %>% 
+  filter(Category == "Urban")
+
+highlights <- dayavgl %>% 
+  filter(mean_leq == max(dayavgl$mean_leq) | mean_leq == min(dayavgl$mean_leq)) %>% 
+  mutate(mean_leq = round(mean_leq, 2))
+
+# Figure 4
+houravgcatl <- readRDS("wrangled_data/houravgcatl.rds")
+
+houravg <- houravgcatl %>% 
+  group_by(Category, Hour) %>% 
+  summarize(mean_leq = mean(meanleq),
+            se_leq = plotrix::std.error(meanleq))
+
+hourly_houravg <- houravgcatl %>% 
+  dplyr::select(Category, Hour, meanleq) %>% 
+  group_by(Hour, Category) %>% 
+  summarise(mean = mean(meanleq),
+            sd = sd(meanleq))
+
+dayavgl_2020 <- dayavgl %>% 
+  filter(Date < "2021-01-01") 
+
+season_dayavgl_2020 <- dayavgl_2020 %>% 
+  ungroup() %>% 
+  dplyr::select(Site, Visit, Category, mean_leq) %>% 
+  group_by(Category, Visit) %>% 
+  summarise(mean = mean(mean_leq),
+            sd = sd(mean_leq))
+
+combined_Lan <- readRDS("wrangled_data/combined_Lan.rds")
+
+# Figure 5
+choice_by_day <- readRDS("wrangled_data/choice_by_day.rds")
+
+choice_lq <- choice_by_day %>% 
+  filter(! side_lq == "tunnel") %>% 
+  mutate(side = ifelse(side_lq == "Loud", 1, 0))
+
+choice_lq_scaled <- choice_lq %>% 
+  mutate(mean_leq = c(scale(mean_leq)),
+         Age = c(scale(Age)),
+         condition = c(scale(condition)))
+
+choice_lq2 <- choice_lq %>% 
+  group_by(Age, mean_leq, side) %>% 
+  count()
+
+choice <- readRDS("wrangled_data/choice.rds")
+
+choice %>% 
+  # group by all the different ways we can use site
+  group_by(Site, mean_leq, Origin) %>% 
+  # count the number of loud and quiet choices
+  count(side_w_more) %>% 
+  pivot_wider(names_from = "side_w_more", values_from = "n") %>% 
+  # calculate the proportion of spiders that chose loud
+  mutate(prop = round(loud / (loud + quiet), 2))
+
+choice_scaled <- choice %>% 
+  mutate(Age = c(scale(Age)),
+         condition = c(scale(condition)),
+         mean_leq = c(scale(mean_leq)))
+
+choice2 <- choice %>% 
+  group_by(Age, mean_leq, side) %>% 
+  count()
+
+choice_part <- choice %>% 
+  pivot_longer(propl_tunnel:propt_tunnel, values_to = "prop_part", names_to = "part") %>% 
+  mutate(part = fct_recode(part, "Loud" = "propl_tunnel", "Quiet" = "propq_tunnel", "Tunnel" = "propt_tunnel"))
+
+choice_part_scaled <- choice_part %>% 
+  mutate(Age = c(scale(Age)),
+         mean_leq = c(scale(mean_leq)),
+         condition = c(scale(condition)),
+         ID = factor(ID))
+
+# Figure S1
+pca <- readRDS("wrangled_data/pca.rds")
+site_pca <- PCA(pca[,1:4], graph = FALSE)
+
+# Figure S2
+mic_mic2 <- read.csv("data/mic_mic2.csv")
+
+vibmap <- full_join(houravgcatl, mic_mic2, by = c("Site", "Substrate", "Mic")) %>% 
+  mutate(Substrate = ifelse(Substrate == "Plant", "Plant", "Manmade")) %>% 
+  unite("Sub_Mic", c(Substrate, Mic2), sep = "_") %>% 
+  filter(! Sub_Mic == "Manmade_NA", ! Sub_Mic == "Plant_NA") %>% 
+  mutate(Site = factor(Site), 
+         Site = fct_relevel(Site, "6B", "6C", "5A", "7B", "6A", "7A", "1B", "1C", "2C", "3B", "5B", "8A", "2B", "3C", "2A", "7C", "1A", "4C", "3A", "4B", "4A", "5C", "8B"))
+
+# recorder the sites by site average Leq
+sites <- sites %>% 
+  mutate(holder = 1,
+         Site = factor(Site), 
+         Site = fct_relevel(Site, "6B", "6C", "5A", "7B", "6A", "7A", "1B", "1C", "2C", "3B", "5B", "8A", "2B", "3C", "2A", "7C", "1A", "4C", "3A", "4B", "4A", "5C", "8B")) 
+
+# Figure S3
+field_freq <- readRDS("wrangled_data/field_freq.rds")
+bottom_freq <- readRDS("wrangled_data/bottom_freq.rds")
+farside_freq <- readRDS("wrangled_data/farside_freq.rds")
+
+# Figure S4 - same as Figure 3b
+
+# Figure S5
+field_freq_site_manmade <- readRDS("wrangled_data/field_freq_site_manmade.rds")
+
+# Figure S6
+houravgvisit <- houravgcatl %>% 
+  group_by(Category, Hour, Visit) %>% 
+  summarize(mean_leq = mean(meanleq),
+            se_leq = plotrix::std.error(meanleq))
+
+hourly_visit_houravg <- houravgcatl %>% 
+  dplyr::select(Category, Visit, Hour, meanleq) %>% 
+  group_by(Hour, Category, Visit) %>% 
+  summarise(mean = mean(meanleq),
+            sd = sd(meanleq))
+
+# Figure S8
+activity <- readRDS("wrangled_data/activity.rds")
+activity_total <- readRDS("wrangled_data/activity_total.rds")
+
+dark_activity <- data.frame(PeakHour = c(seq(0, 23.5, 0.5))) %>% 
+  mutate(lights_out = ifelse(PeakHour<11, 25, 0))
+activity_peak <- readRDS("wrangled_data/activity_peak.rds")
+
+photo_night_total <- readRDS("wrangled_data/photo_night_total.rds")
+
+dark_choice <- dark_activity %>% 
+  mutate(lights_out = ifelse(PeakHour<11, 3, 0))
+photo_night_peaks <- readRDS("wrangled_data/photo_night_peaks.rds")
+
+# Figure S9
+photos <- read.csv("data/choice_photos.csv", header = TRUE)
+photos_seen <- readRDS("wrangled_data/photos_seen.rds")
+photos_side <- readRDS("wrangled_data/photos_side.rds")
+```
+
+# Figure 1
+
+```{r figure 1D}
+land <- land_cover  %>%  
+ggplot(aes(x = Site, y = Percent, fill = Land_Cover)) +
+  geom_col(position = "fill") +
+  ylab("Proportion of land cover \nclass in 1-km radius") +
+  scale_fill_manual("Land cover", 
+                        values = c("#666666", "#1B9E77", "#D95F02"), 
+                        labels = c("Other", "Agriculture", "Urban")) +
+  theme_classic() +
+  theme(text = element_text(size = 10, color = "black", family = "sans"), 
+        axis.title = element_text(size = 10, family = "sans"), 
+        axis.text = element_text(size = 10, color = "black", family = "sans"),
+        legend.position = "none")
+
+jpeg("figures/figure1d.jpeg", width = 6.5, height = 2, units = "in", quality = 100, res = 300)
+print(land)
+dev.off()
+
+land
+```
+
+**Figure 1** (A) Map of Lincoln, Nebraska, USA (city limits in dashed border) and the surrounding area marked with sites where substrate-borne (vibratory) noise was recorded using (B) recording units at the location of (C) female Agelenopsis pennsylvanica webs. Most recordings occurred in 2020, whereas recordings at sites 8A and 8B occurred in 2022. Site labels outlined in black indicate sites where A. pennsylvanica were collected for the microhabitat use test. The purple area shows Wilderness Park, where some A. pennsylvanica were collected for activity monitoring (see “Spider activity patterns across 24 h” section in Supporting Information). (D) Designation of site type (rural or urban) was based on the proportion of land cover class in a 1-km radius of each site (ordered by PC1 axis in Figure S1A). Agriculture (green) includes the 2019 National Land Cover Database (NLCD) classes Pasture/Hay and Cultivated Crop. Urban (orange) includes NLCD classes Developed Open Space, Developed Low-Intensity, Developed Medium-Intensity, and Developed High-Intensity. Other (gray) includes all other NLCD classes. Sites with more agricultural land than urban land are categorized as rural and the rest as urban.
+
+# Figure 2
+
+```{r figure 2C}
+# see 7_choice_vibration_map.Rmd for process
+jpeg("figures/figure2c.jpeg", width = 2057, height = 900, units = "px", quality = 100, res = 300)
+print(vibration_map)
+dev.off()
+
+vibration_map
+```
+
+**Figure 2** Experimental setup of the microhabitat use trials. (A) The microcosm was constructed from two large clear acrylic chambers and one smaller tunnel (B) suspended in acoustic foam, with a piezo electric contact microphone attached to the bottom of each chamber. In the large chambers we played low-frequency (<1000 Hz) white noise vibrations that varied in noise amplitude similar to field recorded variation (~15 dB), with one chamber playing loud vibrations and the other quiet. (C) The results from testing the resultant vibrations, recorded for 30 s during playback at points all across a microcosm using the same recording system as was used in the field recordings. The colors and numbers represent the relative amplitude (measured as Leq, in units dB re FS).
+
+# Figure 3
+
+```{r figure 3A}
+lancaster <- map_data("county") %>% 
+  subset(region == "nebraska") %>% 
+  subset(subregion == "lancaster")
+
+lc_borders <- c(bottom  = min(lancaster$lat) + 0.05, 
+                 top     = max(lancaster$lat)  - 0.13,
+                 left    = min(lancaster$long) - 0.01,
+                 right   = max(lancaster$long) - 0.05)
+
+# You will have to create an account or login to https://client.stadiamaps.com/. Then get an api key and use:
+# register_stadiamaps(key = "YOUR-API-KEY", write = TRUE), then it will work
+map <- get_stadiamap(lc_borders, zoom = 10, maptype = "stamen_toner")
+
+leq_map <- ggmap(map) + 
+  ggsn::scalebar(x.min = -96.9, x.max = -96.5, 
+                 y.min = 40.57, y.max = 40.899,
+                 dist = 5, dist_unit = "km", transform = TRUE,
+                 location = "bottomleft", 
+                 st.bottom = FALSE, box.color = c("black", "black"),
+                 st.size = 4, border.size = 0.5, st.dist = 0.03) + # add scalebar
+  geom_polygon(data = lincoln, 
+               aes(x = longitude, y = latitude), 
+               fill = "slategray", alpha = 0.25, color = "gray30") +
+  geom_point(data = sites, 
+             mapping = aes(x = Longitude, y = Latitude), 
+             pch=21, size = 1, fill = "black") +
+  geom_label_repel(aes(x =Longitude, y = Latitude, 
+                       fill = mean_leq, label = mean_leq), 
+                   min.segment.length = 0.1, max.overlaps = Inf, 
+                   size = 2, data = sites) +
+  scale_fill_viridis(name = "Amplitude \n(Leq, dB)", option = "C") +
+  ylab("Latitude") + xlab("Longitude") +
+  labs(fill = "Avg. Leq (dB)") +
+  theme_classic() + 
+  theme(panel.border = element_rect(colour = "black", fill=NA, size=1)) +
+  theme(legend.position = c(0.75, 0.07),
+        legend.direction = "horizontal",
+        legend.background = element_rect(fill = "white",
+                                  size = 0.5, linetype = "solid", 
+                                  colour ="black"),
+        
+        legend.key.height = unit(0.15, 'cm'),
+        legend.key.width = unit(0.4, 'cm')) + # legend properties
+  theme(text = element_text(size = 10, color = "black", family = "sans"),
+        axis.text = element_text(size = 10, color = "black", family = "sans"),
+        legend.text = element_text(size = 6, family = "sans"),
+        legend.title = element_text(size = 6, family = "sans")) # text size
+
+jpeg("figures/figure3a.jpeg", width = 4, height = 4.5, units = "in", quality = 100, res = 300)
+print(leq_map)
+dev.off()
+
+leq_map
+```
+
+```{r figure 3B}
+dayavgl.lmer <- lmer(mean_leq ~ Dim.1 * Substrate + (1|Site), data = dayavgl)
+
+predictions <- expand.grid(Dim.1 = seq(-3.5, 2.5, 0.05),
+                           Substrate = levels(factor(dayavgl$Substrate)))
+predictions$response <- predict(dayavgl.lmer, newdata = predictions, se.fit = TRUE, re.form = NA, type = "response")
+
+bigBoot_spatial <- readRDS("bootstrapping/bigBoot_spatial.Rds")
+predSE <- t(apply(bigBoot_spatial$t, MARGIN = 2, FUN = sd))
+predictions$SE <- predSE[1, ]
+
+spatial <- ggplot() +
+  annotate("rect", xmin = -3.75, xmax = -1.5, ymin = -73, ymax = -57,
+           alpha = 0.25, color = "#1B9E77", fill = NA, linewidth = 1) +
+  annotate("rect", xmin = -0.5, xmax = 2.5, ymin = -69, ymax = -50,
+           alpha = 0.25, color = "#D95F02", fill = NA, linewidth = 1) +
+  geom_point(aes(x = Dim.1, y = mean, color = Substrate), data = spatial_dayavgl, position = position_dodge(width = 0.25), size = 1) +
+  geom_errorbar(aes(x = Dim.1, ymax = mean + sd, ymin = mean - sd, color = Substrate), width = 0, data = spatial_dayavgl, position = position_dodge(width = 0.25), linewidth = 0.4) +
+  geom_point(aes(x = Dim.1, y = mean_leq), color = "red", data = highlights) +
+  geom_line(aes(x = Dim.1, y = response, color = Substrate), data = predictions) +
+  geom_ribbon(aes(x = Dim.1, ymax = response + SE, ymin = response - SE, fill = Substrate, color = Substrate), data = predictions, alpha = 0.5) +
+  geom_label_repel(aes(x = Dim.1, y = mean_leq, label = mean_leq), color = "red", hjust = "right", data = highlights, size = 2) +
+  xlab("Potential traffic impact \n(PC1, explains 70.9%)") +
+  ylab("Daily average relative amplitude \n(Leq in dB re FS, 20-1000 Hz)") +
+  scale_color_manual("Substrate", values = c("grey30", "#66A61E"),
+                     labels = c("Manmade", "Plant")) +
+  scale_fill_manual("Substrate", values = c("grey30", "#66A61E"),
+                     labels = c("Manmade", "Plant")) +
+  scale_y_continuous(limits = c(-75, -50), breaks = c(-75, -70, -65, -60, -55, -50)) +
+  scale_x_continuous(limits = c(-3.75, 2.65), breaks = c(-3, -2, -1, 0, 1, 2)) +
+  theme_classic() +
+  theme(text = element_text(size = 10, color = "black", family = "sans"),
+        axis.text = element_text(size = 10, color = "black", family = "sans"),
+        axis.title = element_text(size = 10, color = "black", family = "sans"),
+        legend.text = element_text(size = 8, color = "black", family = "sans"),
+        legend.position = "top",
+        legend.title = element_text(size = 8),
+        panel.grid.major.y = element_line(colour = "black", linetype = "dashed", linewidth = 0.1)
+        )
+
+jpeg("figures/figure3b.jpeg", width = 2.75, height = 4.5, units = "in", quality = 100, res = 300)
+print(spatial)
+dev.off()
+
+spatial
+```
+
+```{r figure 3C}
+dayavgl.rlmer.r <- rlmer(mean_leq ~ Dim.1 * Substrate + (1|Site), data = dayavgl_rural)
+
+predictions <- as.data.frame(effect("Dim.1*Substrate", dayavgl.rlmer.r))
+size = 10
+
+spatial_rural <- ggplot() +
+  geom_point(aes(x = Dim.1, y = mean, color = Substrate), data = spatial_dayavgl_r, position = position_dodge(width = 0.25), size = 1) +
+  geom_errorbar(aes(x = Dim.1, ymax = mean + sd, ymin = mean - sd, color = Substrate), width = 0, data = spatial_dayavgl_r, position = position_dodge(width = 0.25), linewidth = 0.4) +
+  geom_line(aes(x = Dim.1, y = fit, color = Substrate), data = predictions) +
+  geom_ribbon(aes(x = Dim.1, ymax = fit + se, ymin = fit - se, fill = Substrate, color = Substrate), data = predictions, alpha = 0.5) +
+  xlab("Potential traffic impact \n(PC1, explains 70.9%)") +
+  ylab("Daily average relative amplitude \n(Leq in dB re FS, 20-1000 Hz)") +
+  #ylab("Amplitude (dB)\nQuieter <-------------------> Louder") +
+  scale_color_manual("Substrate", values = c("grey30", "#66A61E"),
+                     labels = c("Manmade", "Plant")) +
+  scale_fill_manual("Substrate", values = c("grey30", "#66A61E"),
+                     labels = c("Manmade", "Plant")) +
+  scale_y_continuous(limits = c(-75, -50), breaks = c(-75, -70, -65, -60, -55, -50)) +
+  scale_x_continuous(limits = c(-3.5, -2), breaks = c(-3.5, -3, -2.5, -2)) +
+  theme_classic() +
+  theme(text = element_text(size = size, color = "black", family = "sans"),
+        axis.text = element_text(size = size, color = "black", family = "sans"),
+        axis.title = element_text(size = size, color = "black", family = "sans"),
+        legend.text = element_text(size = size, color = "black", family = "sans"),
+        legend.position = "none",
+        legend.title = element_text(size = size),
+        #panel.grid.major.y = element_line(colour = "black", linetype = "dashed", linewidth = 0.1),
+        panel.border = element_rect(color = "#1B9E77", fill = NA, linewidth = 2))
+
+jpeg("figures/figure3c.jpeg", 3.25, height = 2.75, units = "in", quality = 100, res = 300)
+print(spatial_rural)
+dev.off()
+
+spatial_rural
+```
+
+```{r figure 3D}
+dayavgl.lmer.u <- lmer(mean_leq ~ Dim.1 * Substrate + (1|Site), data = dayavgl_urban)
+
+predictions <- expand.grid(Dim.1 = seq(0, 2.2, 0.05),
+                           Substrate = 
+                             levels(factor(dayavgl_urban$Substrate)))
+predictions$response <- predict(dayavgl.lmer.u, 
+                                newdata = predictions, se.fit = TRUE, 
+                                re.form = NA, type = "response")
+
+bigBoot_spatial_urban <- readRDS("bootstrapping/bigBoot_spatial_urban.Rds")
+predSE <- t(apply(bigBoot_spatial_urban$t, MARGIN = 2, FUN = sd))
+predictions$SE <- predSE[1, ]
+
+spatial_urban <- ggplot() +
+  geom_point(aes(x = Dim.1, y = mean, color = Substrate), data = spatial_dayavgl_u, position = position_dodge(width = 0.25), size = 1) +
+  geom_errorbar(aes(x = Dim.1, ymax = mean + sd, ymin = mean - sd, color = Substrate), width = 0, data = spatial_dayavgl_u, position = position_dodge(width = 0.25), linewidth = 0.4) +
+  geom_line(aes(x = Dim.1, y = response, color = Substrate), data = predictions) +
+  geom_ribbon(aes(x = Dim.1, ymax = response + SE, ymin = response - SE, fill = Substrate, color = Substrate), data = predictions, alpha = 0.5) +
+  xlab("Potential traffic impact \n(PC1, explains 70.9%)") +
+  #ylab("Amplitude (dB)\nQuieter <-------------------> Louder") +
+  ylab("Daily average relative amplitude \n(Leq in dB re FS, 20-1000 Hz)") +
+  scale_color_manual("Substrate", values = c("grey30", "#66A61E"),
+                     labels = c("Manmade", "Plant")) +
+  scale_fill_manual("Substrate", values = c("grey30", "#66A61E"),
+                     labels = c("Manmade", "Plant")) +
+  scale_y_continuous(limits = c(-75, -49), breaks = c(-75, -70, -65, -60, -55, -50)) +
+  scale_x_continuous(limits = c(0, 2.2), breaks = c(0, 0.5, 1, 1.5, 2)) +
+  theme_classic() +
+  theme(text = element_text(size = 10, color = "black", family = "sans"),
+        axis.text = element_text(size = 10, color = "black", family = "sans"),
+        axis.title = element_text(size = 10, color = "black", family = "sans"),
+        legend.text = element_text(size = 8, color = "black", family = "sans"),
+        legend.position = "none",
+        legend.title = element_text(size = 8),
+        panel.grid.major.y = element_line(colour = "black", linetype = "dashed", linewidth = 0.1),
+        panel.border = element_rect(color = "#D95F02", fill = NA, linewidth = 2))
+
+jpeg("figures/figure3d.jpeg", 3.25, height = 2.75, units = "in", quality = 100, res = 300)
+print(spatial_urban)
+dev.off()
+
+spatial_urban
+```
+
+**Figure 3** Results of spatial analysis of vibratory noise. (A) Site mean of the daily average noise amplitude (measured as Leq in units dB re FS) across all 23 sites is given in the text label and represented by color (quieter in blue, louder in yellow). Site mean noise amplitude ranged from −55 dB to −70 dB re FS. Major highways and interstates are represented by thick, dark lines. (B–D) Raw data (mean ± SD) and model predictions (line ± ribbon = mean ± SE) from linear mixed effect (LME) model of daily average noise amplitude by the potential traffic impact (PC1, see principal component analysis in Figure S1) and substrate (gray = manmade, green = plant) with site as a random effect. Results are shown for (B) data overall, [(C) robust LME] rural sites, and (D) urban sites. Green boxes represent rural sites and orange boxes represent urban. (B) The red dots and text show the lowest and highest daily average noise amplitude readings. Overall, (B) noise levels were positively related to the potential traffic impact, and manmade substrates carried significantly louder vibrations. However, no relationships between noise and potential traffic impact or substrate were found in the rural subset, suggesting (D) that these patterns are driven by variation in urban areas.
+
+# Figure 4
+
+```{r figure 4A}
+formatting_face <- ifelse(houravg$Hour == 8 | houravg$Hour == 9 | houravg$Hour == 15, "bold", "plain")
+formatting_size <- ifelse(houravg$Hour == 8 | houravg$Hour == 9 | houravg$Hour == 15, 12, 10)
+
+hourly <- ggplot() +
+  annotate("rect", xmin = -0.5, xmax = 7, ymin = -75, ymax = -42,
+           alpha = 0.5,fill = "darkgrey") +
+  annotate("rect", xmin = 19, xmax = 23.5, ymin = -75, ymax = -42,
+           alpha = 0.5,fill = "darkgrey") +
+  geom_point(aes(x = Hour, y = mean, color = Category), data = hourly_houravg, position = position_dodge(width = 0.25), size = 1) +
+  geom_errorbar(aes(x = Hour, ymax = mean + sd, ymin = mean - sd, color = Category), data = hourly_houravg, position = position_dodge(width = 0.25), linewidth = 0.5, width = 0) +
+  geom_vline(xintercept = 8, color = "#D95F02", linetype = "dashed", size = 0.5) +
+  geom_vline(xintercept = 15, color = "#D95F02", linetype = "dashed", size = 0.5) +
+  geom_vline(xintercept = 9, color = "#1B9E77", linetype = "dashed", size = 0.5) +
+  geom_vline(xintercept = 15.1, color = "#1B9E77", linetype = "dashed", size = 0.5) +
+  geom_line(aes(x = Hour, y = mean_leq, color = Category), data = houravg, linewidth = 0.5) +
+  geom_ribbon(aes(x = Hour, ymin = mean_leq - se_leq, ymax = mean_leq + se_leq, fill = Category), data = houravg, alpha = 0.5) +
+  xlab("Hour of day") +
+  ylab("Hourly average relative amplitude \n(Leq in dB re FS, 20-1000 Hz)") +
+  scale_color_manual("Category", values = c("#1B9E77", "#D95F02"),
+                     labels = c("Rural", "Urban")) +
+  scale_fill_manual("Category", values = c("#1B9E77", "#D95F02"),
+                     labels = c("Rural", "Urban")) +
+  scale_x_continuous(limits = c(-0.5, 23.5), breaks = seq(0, 23, 1), expand = c(0, 0)) +
+  scale_y_continuous(limits = c(-75, -42), breaks = c(-75, -70, -65, -60, -55, -50, -45), expand = c(0, 0)) +
+  theme_classic() +
+  theme(text = element_text(size = 10, color = "black", family = "sans"),
+        legend.position = "top",
+        axis.text = element_text(size = formatting_size, color = "black", family = "sans", face = formatting_face))
+
+jpeg("figures/figure4a.jpeg", 3.25, height = 2.75, units = "in", quality = 100, res = 300)
+print(hourly)
+dev.off()
+
+hourly
+```
+
+```{r figure 4B}
+season.lmer <- lmer(mean_leq ~ Visit * Category + (1|Site), data = dayavgl_2020)
+
+predictions <- expand.grid(Visit = levels(factor(dayavgl$Visit)),
+                           Category = levels(factor(dayavgl_2020$Category)))
+predictions$response <- predict(season.lmer, newdata = predictions, se.fit = TRUE, re.form = NA, type = "response")
+
+bigBoot_season <- readRDS("bootstrapping/bigBoot_season.Rds")
+predSE <- t(apply(bigBoot_season$t, MARGIN = 2, FUN = sd))
+predictions$SE <- predSE[1, ]
+
+labs <- c("Visit 1: Aug 3-20",
+          "Visit 2: Aug 31-Sept 21",
+          "Visit 3: Sept 22-Oct 8",
+          "Visit 4: Oct 12-23")
+names(labs) <- c("1", "2", "3", "4")
+
+group2v3 <- data.frame(x = c(2, 3), 
+                   y = c(-51, -51))
+
+size = 16
+ggplot() +
+  geom_point(aes(x = Visit, y = mean, color = Category), data = season_dayavgl_2020, position = position_dodge(width = 0.25), size = 1) +
+  geom_errorbar(aes(x = Visit, ymax = mean + sd, ymin = mean - sd, color = Category), width = 0, data = season_dayavgl_2020, position = position_dodge(width = 0.25), linewidth = 0.4) +
+  geom_point(aes(x = Visit, y = mean_leq), color = "red", data = highlights) +
+  geom_line(aes(x = as.numeric(Visit), y = response, color = Category, group = Category), position = position_dodge(width = 0.25), data = predictions, linewidth = 0.5) +
+  geom_ribbon(aes(x = as.numeric(Visit), ymax = response + SE, ymin = response - SE, color = Category, fill = Category, group = Category), position = position_dodge(width = 0.25), alpha = 0.5, data = predictions) +
+  geom_line(data = group2v3, aes(x= x, y = y, group=1), inherit.aes = F) +
+  geom_label_repel(aes(x = Visit, y = mean_leq, label = mean_leq), color = "red", hjust = "right", data = highlights, size = 2) +
+  xlab("Visit") +
+  ylab("Daily average relative amplitude \n(Leq in dB re FS, 20-1000 Hz)") +
+  #ylab("Amplitude (dB)\nQuieter <-------------------> Louder") +
+  scale_color_manual("Category", values = c("#1B9E77", "#D95F02"),
+                     labels = c("Rural", "Urban")) +
+  scale_fill_manual("Category", values = c("#1B9E77", "#D95F02"),
+                     labels = c("Rural", "Urban")) +
+  scale_x_discrete(labels=c("1" = "Aug 3-\nAug 20\n1", "2" = "Aug 31-\nSept 21\n2",
+                              "3" = "Sept 22-\nOct 8\n3", "4" = "Oct 12-\nOct 23\n4")) +
+  scale_y_continuous(limits = c(-75, -50), breaks = c(-75, -70, -65, -60, -55, -50)) +
+  theme_classic() +
+  theme(text = element_text(size = size, color = "black", family = "sans"),
+        axis.text = element_text(size = size, color = "black", family = "sans"),
+        axis.title = element_text(size = size, color = "black", family = "sans"),
+        legend.text = element_text(size = size, color = "black", family = "sans"),
+        legend.position = "none",
+        panel.grid.major.y = element_line(colour = "black", linetype = "dashed", size = 0.1)
+        ) +
+   annotate("text", x = 2.5, y = -50.75, label = "*", size = 6, color = "black") 
+```
+
+```{r figure 4C}
+ggplot() +
+  geom_line(aes(x = Week.Ending, y = Weekly.Value, group = Commodity, color = Commodity), data = combined_Lan, linewidth = 1, alpha = 1) +
+  geom_area(aes(x = Week.Ending, y = Weekly.Value, group = Commodity, color = Commodity, fill = Commodity), data = combined_Lan, alpha = 0.5, position = 'identity') +
+  scale_color_manual("Crop", values = c("#e6ab02", "#66a61e", "black"), 
+                     labels = c("Corn", "Soybeans", "Mean")) +
+  scale_fill_manual("Crop", values = c("#e6ab02", "#66a61e", "black"), 
+                     labels = c("Corn", "Soybeans", "Mean")) +
+  scale_x_date(date_labels = "%b %d", limits = as.Date(c("2020-08-02", "2020-10-25")), breaks = as.Date(c("2020-08-03", "2020-08-31", "2020-09-22", "2020-10-12", ""))) + #2020-10-23
+  scale_y_continuous(limits = c(0, 30), breaks = c(0, 5, 10, 15, 20, 25, 30)) +
+  xlab("Date (weeks)") +
+  ylab("% harvested per week") +
+  theme_classic() +
+  theme(legend.key.size = unit(0.5, "cm"),
+        text = element_text(size = 10), 
+        axis.title = element_text(size = 10, color = "black", family = "sans"),
+        axis.text = element_text(size = 10, color = "black", family = "sans"),
+        legend.text = element_text(size = 8, color = "black", family = "sans"),
+        legend.title = element_text(size = 8, color = "black", family = "sans"),
+        legend.position = c(0.21, 0.7),
+        # legend.background = element_rect(fill="grey95",
+        #                           linewidth=0.5, linetype="solid", 
+        #                           colour ="black"),
+         #panel.grid.major.x = element_line(colour = "black", linetype = "dashed", size = 0.1)
+        ) +
+  annotate(geom = "text", x = as.Date("2020-08-16"), y = 30, label = "Visit 1", color = "black", size = 3) +
+  annotate(geom = "text", x = as.Date("2020-09-11"), y = 30, label = "Visit 2", color = "black", size = 3) +
+  annotate(geom = "text", x = as.Date("2020-10-02"), y = 30, label = "Visit 3", color = "black", size = 3) +
+  annotate(geom = "text", x = as.Date("2020-10-18"), y = 30, label = "Visit 4", color = "black", size = 3) +
+  annotate(geom = "text", x = as.Date("2020-09-11"), y = 28, label = "15%", color = "#e6ab02", size = 2) +
+  annotate(geom = "text", x = as.Date("2020-10-01"), y = 28, label = "34%", color = "#e6ab02", size = 2) +
+  annotate(geom = "text", x = as.Date("2020-10-17"), y = 28, label = "51%", color = "#e6ab02", size = 2) +
+  annotate(geom = "text", x = as.Date("2020-09-11"), y = 27, label = "16%", color = "#66a61e", size = 2) +
+  annotate(geom = "text", x = as.Date("2020-10-01"), y = 27, label = "70%", color = "#66a61e", size = 2) +
+  annotate(geom = "text", x = as.Date("2020-10-17"), y = 27, label = "14%", color = "#66a61e", size = 2) +
+  annotate(geom = "text", x = as.Date("2020-09-11"), y = 26, label = "15%", color = "black", size = 2) +
+  annotate(geom = "text", x = as.Date("2020-10-01"), y = 26, label = "55%", color = "black", size = 2) +
+  annotate(geom = "text", x = as.Date("2020-10-17"), y = 26, label = "30%", color = "black", size = 2)
+```
+
+**Figure 4** Results of temporal analysis of vibratory noise in 2020. (A) The calculated mean (±SD error bars, ±SE ribbon) hourly average noise amplitude (measured as Leq in units of dB) across 24 h by rural/urban. Vertical dashed lines and bolded hour represent peaks of the associated site type. Darkened areas represent nighttime. Vibratory amplitude was highest around 08:00/09:00 and 15:00 h and lowest throughout the night, but urban sites remained consistently louder than rural sites across 24 h. (B) Raw data (mean ± SD) and model predictions (line ± ribbon = mean ± SE) from linear mixed effect model of daily average noise amplitude by visit (1–4 throughout Agelenopsis pennsylvanica penultimate juvenile/adult season) and rural/urban (green = rural, orange = urban) with site as a random factor. The red dots and text show the lowest and highest daily average noise amplitude reading. Line and asterisk indicate the results of a Tukey pairwise comparison post hoc test (*p < 0.05). Noise levels were higher at urban than rural sites, and there was a trend that noise amplitude varied by visit. The post hoc test showed that there was an increase in noise amplitude from visit 2 to visit 3. (C) USDA data on percent of annual crops harvested at the end of each week in 2020 across Nebraska for two major crops in Lancaster County: corn and soybeans. Vertical lines show the boundaries of each visit for vibratory noise recording. Percentages represent the percent of the harvest of the associated crop that occurred during the visit. Corn and soybean harvest increased around the third visit when we saw a subsequent increase in noise levels.
+
+# Figure 5
+
+```{r figure 5A}
+lq <- glmer(side ~ mean_leq * Age + (1|ID), data = choice_lq_scaled, family = binomial)
+
+pred <- expand.grid(mean_leq = quantile(choice_lq_scaled$mean_leq, probs = c(0, 0.5, 1)),
+                  Age = seq(-2, 2.5, 0.05))
+pred$fit <- predict(lq, newdata = pred, se.fit = TRUE, re.form = NA, type = "response")
+
+bigBoot_lq <- readRDS("bootstrapping/bigBoot_lq.Rds")
+predSE <- t(apply(bigBoot_lq$t, MARGIN = 2, FUN = sd))
+pred$se <- predSE[1, ]
+
+# back transform
+pred$Age = pred$Age * sd(choice_lq$Age) + mean(choice_lq$Age)
+pred$mean_leq = pred$mean_leq * sd(choice_lq$mean_leq) + mean(choice_lq$mean_leq)
+
+spider_side <- ggplot() +
+  geom_jitter(aes(x = Age, y = side, color = factor(mean_leq), size = n), data = choice_lq2, height = 0.1, alpha = 0.5) +
+  geom_line(aes(x = Age, y = fit, color = factor(mean_leq)), data = pred) +
+  geom_ribbon(aes(x = Age, y = fit, ymin = fit - se, ymax = fit + se, fill = factor(mean_leq)), data = pred, alpha = 0.5) +
+  geom_hline(yintercept = 0.5, linetype = 2) +
+  xlab("Age (days since mature)") +
+  ylab("Proportion of observations with \nspiders in the loud chamber") +
+  scale_y_continuous(limits = c(-0.2, 1.2), breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1)) +
+  scale_fill_manual("Site Amplitude (Leq in dB)", 
+                     values = c("#1b9e77", "grey20", "#d95f02"),
+                     labels = c("-69", "-64", "-55")) +
+  scale_color_manual("Site Amplitude (Leq in dB)", 
+                     values = c("#1b9e77", "grey20", "#d95f02"),
+                     labels = c("-69", "-64", "-55")) +
+  scale_size_continuous("Number of \nObservations") +
+  th +
+  theme(legend.position = "top", legend.box="vertical") +
+  guides(shape = guide_legend(override.aes = list(fill = "black")))
+
+spider_side
+```
+
+```{r figure 5B}
+binom_leq <- glm(side ~ mean_leq * Age + mean_leq * condition, 
+                 data = choice_scaled, 
+                 family = binomial(link = "logit"))
+binom_leq <- step(binom_leq)
+
+nd = expand.grid(mean_leq = quantile(choice_scaled$mean_leq, probs = c(0, 0.5, 1)),
+                Age = seq(-2.5, 2.5, 0.2))
+nd <- add_column(nd, fit = predict(binom_leq, newdata = nd, type = "response"),
+                 se = predict(binom_leq, newdata = nd, type = "response", se.fit = TRUE)$se.fit)
+# back transform
+nd$Age = nd$Age * sd(choice$Age) + mean(choice$Age)
+nd$mean_leq = round(nd$mean_leq * sd(choice$mean_leq) + mean(choice$mean_leq), 0)
+
+silk_side <- ggplot() +
+  geom_jitter(aes(x = Age, y = side, color = factor(mean_leq), size = n), data = choice2, height = 0.1, alpha = 0.5) +
+  geom_line(aes(x = Age, y = fit, group = factor(mean_leq), color = factor(mean_leq)), data = nd) +
+  geom_ribbon(aes(x = Age, y = fit, ymin = fit - se, ymax = fit + se, fill = factor(mean_leq)), data = nd, alpha = 0.5) +
+  geom_hline(yintercept = 0.5, linetype = 2) +
+  ylab("Proportion of spiders with \nmore silk in the loud chamber") +
+  xlab("Age (days since mature)") +
+  scale_y_continuous(limits = c(-0.2, 1.2), breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1)) +
+  scale_fill_manual("Site Amplitude (Leq in dB)", 
+                    values = c("#1B9E77", "grey20", "#D95F02"),
+                    labels = c("-69", "-64", "-55")) +
+  scale_color_manual("Site Amplitude (Leq in dB)", 
+                    values = c("#1B9E77", "grey20", "#D95F02"),
+                    labels = c("-69", "-64", "-55")) +
+  scale_size_continuous("Number of \nObservations") +
+  th +
+  theme(legend.position = "top", legend.box="vertical")
+
+silk_side
+```
+
+```{r figure 5C}
+beta_leqt <- gam(prop_part ~ part * mean_leq + part * Age + part:mean_leq:Age, data = choice_part_scaled, family = betar(link = "logit"))
+
+pred <- expand.grid(mean_leq = c(min(choice_part_scaled$mean_leq), median(choice_part_scaled$mean_leq), max(choice_part_scaled$mean_leq)),
+                    Age = seq(-2.5, 2.5, 0.5),
+                    part = levels(choice_part_scaled$part))
+pred <- add_column(pred, fit = predict(beta_leqt, newdata = pred, type = "response"),
+                 se = predict(beta_leqt, newdata = pred, type = "response", se.fit = TRUE)$se.fit)
+pred$Age = round(pred$Age * sd(choice$Age) + mean(choice$Age), 0)
+pred$mean_leq = round(pred$mean_leq * sd(choice$mean_leq) + mean(choice$mean_leq), 0)
+
+new_labels <- c("-69" = "Site Amplitude: -69 dB", "-64" = "Site Amplitude: -64 dB", "-55" = "Site Amplitude: -55 dB")
+
+prop_part <- ggplot() +
+  geom_point(aes(x = Age, y = prop_part, group = part, color = part), data = choice_part) +
+  geom_line(aes(x = Age, y = fit, group = part), color = "black", data = pred) +
+  geom_ribbon(aes(x = Age, y = fit, ymin = fit - se, ymax = fit + se, group = part, fill = part), color = "grey20", alpha = 0.5, data = pred) +
+  geom_hline(yintercept = 0.5, linetype = 2) +
+  scale_fill_manual("Chamber", 
+                    values = c("grey0", "grey40", "grey80"),
+                    labels = c("Loud", "Quiet", "Tunnel")) +
+  scale_color_manual("Chamber", 
+                    values = c("grey0", "grey40", "grey80"),
+                    labels = c("Loud", "Quiet", "Tunnel")) +
+  scale_y_continuous(limits = c(0, 1), breaks = c(0, 0.25, 0.5, 0.75, 1)) +
+  xlab("Age (days since mature)") +
+  ylab("Proportion of silk mass") +
+  th +
+  theme(legend.position = "top") +
+  facet_wrap(~ mean_leq, labeller = labeller(mean_leq = new_labels))
+
+prop_part
+```
+
+```{r figure 5 combined}
+final <- ggarrange(ggarrange(spider_side, silk_side, ncol = 2, common.legend = TRUE), prop_part, nrow = 2) 
+jpeg("figures/figure5.jpeg", width = 6.5, height = 7, units = "in", quality = 100, res = 300)
+print(final)
+dev.off()
+final
+```
+
+**Figure 5** Results of microhabitat use experiment. (A) The proportion of observations of spiders' positions and (B) the proportion of spiders with more dry silk mass in the loud chamber (vs. the quiet chamber) of the microcosm for spiders of different ages and from sites with different vibratory noise amplitudes (measured as Leq in dB re FS). From quietest to loudest, the site amplitudes are −69 dB re FS to −55 dB re FS, respectively. For both (A) the spider's position and (B) the silk mass, we found a trend in the interaction between site noise amplitude and age. Spiders from the loudest site were more often observed in the loud chamber as recently matured individuals but the effect decreased with age. (C) The proportion of total dry silk mass found in the chambers (loud, quiet, or tunnel) for spiders of different ages and from sites with differing noise amplitude. Spiders put the lowest proportion of silk in the tunnel. At the 25th percentile age, spiders used more silk in the tunnel and loud chambers and less in the quiet as their site noise levels increased. However, these relationships weakened and became non-significant as age increased. For all graphs, the lines (±ribbons) represent the mean (±SE) from the model predictions, respectively. Points represent the raw data. Because (A, B) represents binomial data (i.e., crowding of points at 0 and 1), point size represents the number of observations at that age. Lack of association with a particular chamber is represented by the dashed line at 50%.
+
+# Figure S1
+
+```{r figure s1a}
+pca_plot <- fviz_pca_biplot(site_pca,
+                repel = TRUE,
+                fill.ind = pca$Category,
+                col.ind = pca$Category,
+                palette = c("#D95F02", "#1B9E77"),
+                labelsize = 3,
+                pointsize = 2.0,
+                pointshape = 21,
+                axes.linetype = "dotted",
+                mean.point = FALSE,
+                col.var = "grey40",
+                xlab = "Principal Component 1 (70.9%)",
+                ylab = "Principal Component 2 (18.3%)",
+                title = "",
+                ggtheme = theme_classic() + 
+                  theme(text = element_text(size = 10))) +
+  xlim(-3.5, 3.5) +
+  ylim(-1.5, 2.5) +
+  theme(legend.position = "none") +
+  theme(axis.text.x = element_text(colour = "black", size = 10, family = "sans")) +
+  theme(axis.text.y = element_text(colour = "black", size = 10, family = "sans")) +
+  theme(axis.title.x = element_text(colour = "black", size = 10, family = "sans")) +
+  theme(axis.title.y = element_text(colour = "black", size = 10, family = "sans")) 
+
+jpeg("figures/figures1a.jpeg", width = 4, height = 4, units = "in", quality = 100, res = 300)
+print(pca_plot)
+dev.off()
+pca_plot
+```
+
+```{r figure s1b}
+var <- get_pca_var(site_pca)
+colnames(var$cos2) <- c("PC1", "PC2", "PC3", "PC4")
+rownames(var$cos2) <- c("Imperv.\nCover", "Traffic \nDistance", "Traffic", "Road \nLength")
+corr_plot <- corrplot(var$cos2, is.corr=FALSE, tl.col = "black", addCoef.col = 1, number.cex = 0.5, tl.cex = 0.5, cl.cex = 0.5)
+
+jpeg("figures/figureS1b.jpeg", width = 4, height = 4, units = "in", quality = 100, res = 300)
+print(corr_plot)
+dev.off()
+corr_plot
+```
+
+**Figure S1** Principal Component Analysis of sites using variables related to potential impacts from traffic, including percent impervious cover, distance from the recording site to the nearest road, annual daily average vehicles on the nearest road, and total length of roads in a 1-km radius of the site. (A) The two resulting principal components and the positions of all 23 sites where vibratory noise was recorded (rural sites in green, urban sites in orange). (B) Plot of the contributions of each variable to each principal component (PC). The numbers and colors represent the cos2 for the variables. 
+
+# Figure S2
+
+```{r figure s2}
+vibe <- ggplot(vibmap, aes(x = Visit, y = Hour, fill = meanleq)) +
+  geom_tile(color = "white", size = 0.1, na.rm = TRUE) + 
+  scale_fill_viridis(name = "Hourly Amplitude (Leq)", option = "C") + 
+  facet_grid(Sub_Mic ~ Site) +
+  scale_y_continuous(trans = "reverse", breaks = unique(vibmap$Hour)) +
+  theme_minimal(base_size = 8) +
+  labs(x = "Visit Number (1-4)", y = "Hour of Day") +
+  theme(legend.position = "bottom") +
+  theme(plot.title = element_text(size = 14, color = "black", family = "sans")) +
+  theme(axis.text.y = element_text(size = 6, color = "black", family = "sans")) +
+  theme(strip.background = element_rect(colour = "white")) +
+  theme(plot.title = element_text(hjust = 0, color = "black", family = "sans")) +
+  theme(axis.ticks = element_blank()) +
+  theme(axis.text.x = element_text(size = 6, color = "black", family = "sans")) +
+  theme(legend.title = element_text(size = 8, color = "black", family = "sans")) +
+  theme(legend.text = element_text(size = 6, color = "black", family = "sans")) +
+  removeGrid()
+
+jpeg("figures/figureS2.jpeg", width = 8, height = 8, units = "in", quality = 100, res = 300)
+print(vibe)
+dev.off()
+
+vibe
+```
+
+**Figure S2** Heat map depicting the hourly average relative noise amplitude (as Leq measured in dB re FS, 20–1000 Hz) for all recordings. At the top, sites are in order from quietest to loudest with representative colors (matches Figure 3A). Visits are represented horizontally and the hour of the day vertically. Both contact microphones on manmade substrates are shown in the top two rows whereas those on plants are represented in the bottom two rows with separate rows for each microphone. 
+
+# Figure S3
+
+```{r figure s3a}
+field_noise <- field_freq %>% 
+  ggplot() +
+  geom_line(aes(x = Low_Freq, y = mean_power, linetype = Site, color = Locations)) +
+  geom_ribbon(aes(x = Low_Freq, ymin = mean_power - se_power, ymax = mean_power + se_power, group = Site, fill = Locations), alpha = 0.5) +
+  scale_color_manual("", values = c("#1b9e77", "#d95f02"),
+                     labels = c("Rural", "Urban")) +
+  scale_fill_manual("", values = c("#1b9e77", "#d95f02"),
+                     labels = c("Rural", "Urban")) +
+  scale_linetype_manual(values = c("solid", "longdash", "dotted", "solid", "longdash", "dotted"),
+                        labels = c("8B - loudest urban", "5C", "4A", "5A", "6C", "6B - quietest rural")) +
+  xlab("Frequency (5.86 Hz Bins)") +
+  ylab("Relative Amplitude \n(Inband Power, dB re FS)") +
+  theme_classic() +
+  theme(axis.text = element_text(family = "sans", size = 14, color = "black"),
+        axis.title = element_text(family = "sans", size = 14, color = "black"),
+        legend.text = element_text(family = "sans", size = 14, color = "black"),
+        legend.title = element_text(family = "sans", size = 14, color = "black"),
+        strip.text = element_text(family = "sans", size = 14, color = "black"),
+        legend.position = "top") +
+  guides(linetype = guide_legend(nrow = 6),
+         color = guide_legend(nrow = 2)) +
+  facet_wrap(~Type)
+
+jpeg("figures/figureS3a.jpeg", width = 8, height = 5, units = "in", quality = 100, res = 300)
+print(field_noise)
+dev.off()
+
+field_noise
+```
+
+```{r figure s3b}
+bottom_graph <- bottom_freq %>% 
+  ggplot() +
+  geom_line(aes(x = Low_Freq, y = mean, color = Chamber)) +
+  geom_ribbon(aes(x = Low_Freq, ymax = mean + se, ymin = mean - se, fill = Chamber), alpha = 0.5) +
+  scale_color_manual("Chamber", values = c("#1b9e77", "#d95f02", "#666666"),
+                     labels = c("Quiet", "Loud", "Tunnel")) +
+  scale_fill_manual("Chamber", values = c("#1b9e77", "#d95f02", "#666666"),
+                     labels = c("Quiet", "Loud", "Tunnel")) +
+  xlab("Frequency (5.86 Hz Bins)") +
+  ylab("Relative Amplitude (Inband Power, dB re FS)") +
+  theme_classic() +
+  theme(axis.text = element_text(family = "sans", size = 14, color = "black"),
+        axis.title = element_text(family = "sans", size = 14, color = "black"),
+        legend.text = element_text(family = "sans", size = 14, color = "black"),
+        legend.title = element_text(family = "sans", size = 14, color = "black"),
+        strip.text = element_text(family = "sans", size = 14, color = "black"),
+        legend.position = "top")
+
+jpeg("figures/figureS3b.jpeg", width = 4.5, height = 4.5, units = "in", quality = 100, res = 300)
+print(bottom_graph)
+dev.off()
+
+bottom_graph
+```
+
+```{r figure s3c}
+farside_graph <- farside_freq %>% 
+  ggplot() +
+  geom_line(aes(x = Low_Freq, y = mean, color = Chamber)) +
+  geom_ribbon(aes(x = Low_Freq, ymax = mean + se, ymin = mean - se, fill = Chamber), alpha = 0.5) +
+  scale_color_manual("Chamber", values = c("#1b9e77", "#d95f02"),
+                     labels = c("Quiet", "Loud")) +
+  scale_fill_manual("Chamber", values = c("#1b9e77", "#d95f02"),
+                     labels = c("Quiet", "Loud")) +
+  xlab("Frequency (5.86 Hz Bins)") +
+  ylab("Relative Amplitude (Inband Power, dB re FS)") +
+  theme_classic() +
+  theme(axis.text = element_text(family = "sans", size = 14, color = "black"),
+        axis.title = element_text(family = "sans", size = 14, color = "black"),
+        legend.text = element_text(family = "sans", size = 14, color = "black"),
+        legend.title = element_text(family = "sans", size = 14, color = "black"),
+        strip.text = element_text(family = "sans", size = 14, color = "black"),
+        legend.position = "top")
+
+jpeg("figures/figureS3c.jpeg", width = 4.5, height = 4.5, units = "in", quality = 100, res = 300)
+print(farside_graph)
+dev.off()
+
+farside_graph
+```
+
+**Figure S3** Frequency profiles of field recordings and microhabitat use chambers. (A) We used Raven Pro v.1.6.5 to assess the inband power (FFT length 8192, Hann window, 50% overlap, 0.171 s time resolution, 5.86 Hz frequency grid spacing) of ambient vibration recordings in 5.86 Hz bins for the three loudest and three quietest sites during the hour in which Agelenopsis pennsylvanica were most active (21:00-22:00, see supporting information: Spider activity patterns across 24 h). Colors and line types represent rural/urban and sites, respectively. The same analysis was repeated for 30-s recordings of all 18 microcosms at (B) the bottom center of all chambers and (C) the center of the most distant sides of the loud and quiet chambers. (B-C) Colors represent the chamber where the recording occurred. In all graphs, the lines and ribbons represent the calculated mean and standard error. (A) Vibratory noise in the field was most prominent below ~500 Hz with urban sites exhibiting louder and more variable noise than rural areas. (B-C) The chambers exhibited increased noise levels in the loud chamber below 500 Hz as was found in the field. However, the loud chamber is consistently louder than the quiet chamber at frequencies above 500 Hz. 
+
+# Figure S4
+
+```{r figure s4 graph}
+dayavgl.lmer2 <- lmer(mean_leq ~ Dim.2 * Substrate * Category + (1|Site), data = dayavgl)
+
+predictions <- expand.grid(Dim.2 = seq(-2, 2, 0.05),
+                           Substrate = levels(factor(dayavgl$Substrate)),
+                           Category = levels(factor(dayavgl$Category)))
+predictions$response <- predict(dayavgl.lmer2, newdata = predictions, se.fit = TRUE, re.form = NA, type = "response")
+
+bigBoot_spatial2 <- readRDS("data/bigBoot_spatial2.Rds")
+predSE <- t(apply(bigBoot_spatial2$t, MARGIN = 2, FUN = sd))
+predictions$SE <- predSE[1, ]
+
+spatial2 <- ggplot() +
+  geom_point(aes(x = Dim.2, y = mean, color = Substrate), data = spatial_dayavgl, position = position_dodge(width = 0.25), size = 1) +
+  geom_errorbar(aes(x = Dim.2, ymax = mean + sd, ymin = mean - sd, color = Substrate), width = 0, data = spatial_dayavgl, position = position_dodge(width = 0.25), linewidth = 0.4) +
+  geom_point(aes(x = Dim.2, y = mean_leq), color = "red", data = highlights) +
+  geom_line(aes(x = Dim.2, y = response, color = Substrate), data = predictions) +
+  geom_ribbon(aes(x = Dim.2, ymax = response + SE, ymin = response - SE, fill = Substrate, color = Substrate), data = predictions, alpha = 0.5) +
+  geom_label_repel(aes(x = Dim.2, y = mean_leq, label = mean_leq), color = "red", hjust = "right", data = highlights, size = 2) +
+  xlab("Potential traffic impact (PC2, explains 18.3%)") +
+  ylab("Daily average relative amplitude \n(Leq in dB re FS, 20-1000 Hz)") +
+  scale_color_manual("Substrate", values = c("grey30", "#66A61E"),
+                     labels = c("Manmade", "Plant")) +
+  scale_fill_manual("Substrate", values = c("grey30", "#66A61E"),
+                     labels = c("Manmade", "Plant")) +
+  scale_y_continuous(limits = c(-75, -50), breaks = c(-75, -70, -65, -60, -55, -50)) +
+  scale_x_continuous(limits = c(-2, 2), breaks = c(-2, -1, 0, 1, 2)) +
+  theme_classic() +
+  theme(text = element_text(size = 10, color = "black", family = "sans"),
+        axis.text = element_text(size = 10, color = "black", family = "sans"),
+        axis.title = element_text(size = 10, color = "black", family = "sans"),
+        legend.text = element_text(size = 8, color = "black", family = "sans"),
+        legend.position = "top",
+        legend.title = element_text(size = 8),
+        panel.grid.major.y = element_line(colour = "black", linetype = "dashed", linewidth = 0.1)) +
+  facet_wrap(~Category)
+
+jpeg("figures/figureS4a.jpeg", width = 6.5, height = 4, units = "in", quality = 100, res = 300)
+print(spatial2)
+dev.off()
+
+spatial2
+```
+
+```{r figure s4 table}
+pc2_stats <- data.frame(Noise_Var = c("Spatial", "Spatial", "Spatial", "Spatial"),
+                        Data = c("Daily Average", "Daily Average", "Daily Average", "Daily Average"),
+                        Variable = c("Potential Traffic Impact (PC2)", "Substrate", "Rural/Urban", "Potential Traffic Impact (PC2) x Rural/Urban"),
+                        Chi = c(8.88, 35.47, 29.09, 3.39),
+                        N = c(295, 295, 295, 295),
+                        P = c("  0.003 **", "< 0.001 ***", "< 0.001 ***", "   0.065 ."),
+                        Cond = c(0.81, 0.81, 0.81, 0.81),
+                        Marg = c(0.53, 0.53, 0.53, 0.53))
+colnames(pc2_stats) <- c('Noise Variation','Data (Subset by)','Variable', 'Chi-Squared', 'N', 'P-Value', 'Cond. R²', 'Marg. R²')
+
+flextable(pc2_stats[ , 1:8]) %>% 
+  autofit() %>% 
+  merge_v(j = c('Noise Variation', 'Data (Subset by)', 'Cond. R²', 'Marg. R²'), part = "body") %>% 
+  bold(bold = TRUE, part = "header") %>% 
+  hline_bottom(part = "body", border = officer::fp_border(width = 2)) %>% 
+  border(j = c('Noise Variation', 'Data (Subset by)', 'Cond. R²', 'Marg. R²'), border.bottom = officer::fp_border(width = 2)) %>% 
+  fontsize(size = 10, part = "all") %>% 
+  align(align = "center", part = "all") %>% 
+  valign(valign = "top", part = "all") %>% 
+  save_as_image(path = here::here("figures/figureS4b.png"))
+```
+
+**Figure S4** Raw data (mean ± SD) and model predictions (line ± ribbon = mean ± SE) from linear mixed effect (LME) models of daily average noise amplitude (measured as Leq in units dB) with the potential traffic impact (PC2, see PCA Figure S1), substrate (grey = manmade, green = plant), and rural/urban with site as a random factor after backward selection. Table of results from the Type II Wald χ2 test of the LME model with variables remaining after backward selection. 
+
+# Figure S5
+
+```{r figure s5}
+field_freq_site_manmade_graph <- field_freq_site_manmade %>% 
+  ggplot() +
+  #geom_line(aes(x = Low_Freq, y = mean_power, linetype = Recorder, color = Substrate), linewidth = 1) +
+  geom_line(aes(x = Low_Freq, y = mean_power, color = Substrate), linetype = "solid") +
+  #geom_ribbon(aes(x = Low_Freq, ymin = mean_power - se_power, ymax = mean_power + se_power, alpha = Recorder, fill = Substrate)) +
+  scale_alpha_discrete(range = c(0.5, 0.5)) +
+  #scale_color_manual("", values = c("grey30", "#66A61E")) +
+  #scale_fill_manual("", values = c("grey30", "#66A61E")) +
+  #scale_linetype_manual(values = c("solid", "dashed", "dashed", "solid", "solid", "dashed", "solid", "dashed")) +
+  xlab("Frequency (5.86 Hz Bins)") +
+  ylab("Relative Amplitude (Inband Power, dB re FS)") +
+  theme_classic() +
+  theme(axis.text = element_text(family = "sans", size = 14, color = "black"),
+        axis.title = element_text(family = "sans", size = 14, color = "black"),
+        legend.text = element_text(family = "sans", size = 14, color = "black"),
+        legend.title = element_text(family = "sans", size = 14, color = "black"),
+        strip.text = element_text(family = "sans", size = 14, color = "black"),
+        legend.position = "top") +
+  guides(linetype = "none",
+         color = guide_legend(nrow = 1),
+         alpha = "none") +
+  facet_wrap(~Site)
+
+jpeg("figures/figureS5.jpeg", width = 6.5, height = 4, units = "in", quality = 100, res = 300)
+print(field_freq_site_manmade_graph)
+dev.off()
+
+field_freq_site_manmade_graph
+```
+
+**Figure S5** Frequency profiles of substrates at the three loudest (top) and three quietest sites (bottom). Sites 8B, 4A, 5A, and 6C show both recordings taken from the same material, whereas sites 5C and 6B had recordings from different materials. There is quite a bit of overlap for sites with recordings on the same material. For site 5C, it appeared that concrete may have carried lower frequencies louder and higher frequencies quieter than recordings on paneling at the same site. The quietest site 6B with different materials showed more overlap. Lines show the average of all recording trials taken between 21:00 and 22:00 hours on that substrate. 
+
+# Figure S6
+
+```{r figure s6}
+formatting_face_visit <- ifelse(houravgvisit$Hour == 8 | 
+                            houravgvisit$Hour == 9 | 
+                            houravgvisit$Hour == 15, "bold", "plain")
+formatting_size_visit <- ifelse(houravgvisit$Hour == 8 | 
+                            houravgvisit$Hour == 9 | 
+                            houravgvisit$Hour == 15, 12, 10)
+
+hourly_visit <- ggplot() +
+  annotate("rect", xmin = -0.5, xmax = 7, ymin = -75, ymax = -42,
+           alpha = 0.5,fill = "darkgrey") +
+  annotate("rect", xmin = 19, xmax = 23.5, ymin = -75, ymax = -42,
+           alpha = 0.5,fill = "darkgrey") +
+  geom_point(aes(x = Hour, y = mean, color = Category), data = hourly_visit_houravg, position = position_dodge(width = 0.25), size = 1) +
+  geom_errorbar(aes(x = Hour, ymax = mean + sd, ymin = mean - sd, color = Category), data = hourly_visit_houravg, position = position_dodge(width = 0.25), linewidth = 0.5, width = 0) +
+  geom_vline(xintercept = 8, color = "#D95F02", linetype = "dashed", size = 0.5) +
+  geom_vline(xintercept = 15, color = "#D95F02", linetype = "dashed", size = 0.5) +
+  geom_vline(xintercept = 9, color = "#1B9E77", linetype = "dashed", size = 0.5) +
+  geom_vline(xintercept = 15.1, color = "#1B9E77", linetype = "dashed", size = 0.5) +
+  geom_line(aes(x = Hour, y = mean_leq, group = Category, color = Category), data = houravgvisit) +
+  geom_ribbon(aes(x = Hour, ymin = mean_leq - se_leq, ymax = mean_leq + se_leq, fill = Category), data = houravgvisit, alpha = 0.5) +
+  xlab("Hour of day") +
+  ylab("Hourly average relative amplitude (Leq in dB re FS, 20-1000 Hz)") +
+  scale_color_manual("Category", values = c("#1B9E77", "#D95F02"),
+                     labels = c("Rural", "Urban")) +
+  scale_fill_manual("Category", values = c("#1B9E77", "#D95F02"),
+                     labels = c("Rural", "Urban")) +
+  scale_x_continuous(limits = c(-0.5, 23.5), breaks = seq(0, 23, 1), expand = c(0, 0)) +
+  scale_y_continuous(limits = c(-75, -42), breaks = c(-75, -70, -65, -60, -55, -50, -45), expand = c(0, 0)) +
+  theme_classic() +
+  theme(text = element_text(size = 10, color = "black", family = "sans"),
+        legend.position = "top",
+        axis.text = element_text(size = formatting_size_visit, color = "black", family = "sans", face = formatting_face_visit)) +
+  facet_wrap(~Visit, ncol = 1, labeller = labeller(Visit = labs))
+
+jpeg("figures/figureS6.jpeg", 5, height = 9, units = "in", quality = 100, res = 300)
+print(hourly_visit)
+dev.off()
+
+hourly_visit
+```
+
+**Figure S6** The calculated mean (± SD error bars, ± SE ribbon) hourly average noise amplitude (measured as Leq in units of dB) across 24 h by rural/urban for each separate visit. Vertical dashed lines represent noise amplitude peaks by associated site type from data overall.
+
+# Figure S7
+
+Used Figure 4A as base plot and used excel to overlay spider activity.
+
+**Figure S7** Raw spider activity from (A) the activity monitor experiment and (B) the microhabitat use experiment. The lines, ribbons, and error bars are replicated from Figure 4A. They represent the calculated mean (± SD error bars, ± SE ribbon) hourly average noise amplitude (measured as Leq in units of dB re FS) across 24 h by rural/urban. Vertical dashed lines and bolded hours represent peaks of the associated site type. Darkened areas represent nighttime. The bars represent the activity of Agelenopsis pennsylvanica measured in (A) the average number of laser breaks per day and (B) the average number of photos where the spider’s position was different from the previous photo in 30-min bins across 24 h. Agelenopsis pennsylvanica are more active at night when vibratory noise levels are higher, yet spatial differences in noise persist. 
+
+# Figure S8
+
+```{r figure s8a}
+act.glm.nb <- glm.nb(TotalActivity ~ Site + Sex, data = activity_total)
+
+pred <- expand.grid(Site = levels(factor(activity_total$Site)),
+                  Sex = levels(factor(activity_total$Sex)))
+pred$fit <- predict(act.glm.nb, pred, type = "response", se.fit = TRUE)$fit
+pred$se.fit <- predict(act.glm.nb, pred, type = "response", se.fit = TRUE)$se.fit
+
+act_total <- ggplot() +
+  geom_jitter(aes(x = Sex, y = TotalActivity, group = Site, color = Site), data = activity, alpha = 0.5, width = 0.25, size = 1) +
+  geom_point(aes(x = Sex, y = fit, group = Site, color = Site), data = pred, position=position_dodge(width=0.25), size = 2) +
+  geom_line(aes(x = Sex, y = fit, group = Site, color = Site), data = pred, position=position_dodge(width=0.25)) +
+  geom_errorbar(aes(x = Sex, ymin = fit - se.fit, ymax = fit + se.fit, group = Site, color = Site), data = pred, position = "dodge", width = 0.25, linewidth = 0.5) +
+  scale_color_manual("", values = c("#7570b3", "#d95f02")) +
+  scale_y_continuous(labels=formatter1000()) +
+  ylab("Total Activity \n(Total Number of Laser Breaks x1000)") +
+  xlab("Sex") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 12, color = "black"),
+        axis.title = element_text(size = 12, color = "black"),
+        legend.text = element_text(size = 12, color = "black"),
+        legend.background = element_rect(colour = 'black', fill = 'white', linetype='solid'),
+        legend.position = "none")
+```
+
+```{r figure s8b}
+act_peak <- ggplot() +
+  geom_col(aes(x = PeakHour, y = lights_out), width = 1, position = "identity", fill = "grey60", color = "grey60", data = dark_activity) +
+  geom_bar(aes(x = PeakHour, fill = Site), data = activity_peak, width = 1, color = "black", position = "identity") +
+  coord_polar(start = 1.7 * pi) +
+  scale_x_continuous(limits = c(0, 24), breaks = seq(0, 23, 1)) +
+  scale_fill_manual("", values = c("#7570b3","#d95f02"),
+                     breaks = c("Forest", "Campus"),
+                    labels = c("Forest", "Campus")) +
+  xlab("Time of Peak Activity (Hours Since Lights Off)") +
+  ylab("Number of Observations \nAcross 5 Days\n") +
+  theme_linedraw() +
+  theme(axis.title = element_text(family = "Arial", size = 12, color = "black"),
+        axis.text = element_text(family = "Arial", size = 12, color = "black"),
+        legend.text = element_text(family = "Arial", size = 12, color = "black"),  
+        legend.title = element_text(family = "Arial", size = 12, color = "black"),
+        legend.position = "top", 
+        legend.background = element_rect(colour = 'black', fill = 'white', linetype='solid')) +
+  facet_wrap(~Site)
+```
+
+```{r figure s8c}
+act.glm.nb <- glm.nb(TotalActivity ~ Origin, data = photo_night_total)
+
+pred <- expand.grid(Origin = levels(factor(photo_night_total$Origin)))
+pred$fit <- predict(act.glm.nb, pred, type = "response", se.fit = TRUE)$fit
+pred$se.fit <- predict(act.glm.nb, pred, type = "response", se.fit = TRUE)$se.fit
+
+photos_total <- ggplot() +
+  geom_jitter(aes(x = Origin, y = TotalActivity, color = Origin), data = photo_night_total, alpha = 0.5, width = 0.25, size = 1) +
+  geom_point(aes(x = Origin, y = fit, color = Origin), data = pred, position=position_dodge(width=0.25), size = 2) +
+  geom_line(aes(x = Origin, y = fit, group = 1), data = pred, position=position_dodge(width=0.25)) +
+  geom_errorbar(aes(x = Origin, ymin = fit - se.fit, ymax = fit + se.fit, group = Origin, color = Origin), data = pred, position = "dodge", width = 0.25, linewidth = 0.5) +
+  scale_color_manual("", values = c("#1b9e77", "#d95f02")) +
+  ylab("Total Activity \n(Total Number of Photos)") +
+  xlab("Site") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 12, color = "black"),
+        axis.title = element_text(size = 12, color = "black"),
+        legend.text = element_text(size = 12, color = "black"),
+        legend.background = element_rect(colour = 'black', fill = 'white', linetype='solid'))
+
+```
+
+```{r figure s8d}
+photos_peak <- ggplot() +
+  geom_col(aes(x = PeakHour, y = lights_out), width = 1, position = "identity", fill = "grey60", color = "grey60", data = dark_choice) +
+  geom_bar(aes(x = PeakHour, fill = Origin), data = photo_night_peaks, width = 1, color = "black", position = "identity") +
+  coord_polar(start = 1.7 * pi) +
+  scale_x_continuous(limits = c(0, 24), breaks = seq(0, 23, 1)) +
+  scale_fill_manual("", values = c("#1b9e77", "#d95f02"),
+                     breaks = c("Rural", "Urban"),
+                    labels = c("Rural", "Urban")) +
+  xlab("Time of Peak Activity (Hours Since Lights Off)") +
+  ylab("Number of Observations \nAcross First Night\n") +
+  theme_linedraw() +
+  theme(axis.title = element_text(family = "Arial", size = 12, color = "black"),
+        axis.text = element_text(family = "Arial", size = 12, color = "black"),
+        legend.text = element_text(family = "Arial", size = 12, color = "black"),  
+        legend.title = element_text(family = "Arial", size = 12, color = "black"),
+        legend.position = "top",
+        legend.background = element_rect(colour = 'black', fill = 'white', linetype='solid')) +
+  facet_wrap(~Origin)
+```
+
+```{r figure s8 combine}
+monitor <- ggarrange(act_total, act_peak, nrow = 1, common.legend = TRUE, widths = c(0.35, 0.65))
+choice <- ggarrange(photos_total, photos_peak,  nrow = 1, common.legend = TRUE, widths = c(0.35, 0.65))
+final_activity <- ggarrange(monitor, choice, nrow = 2)
+jpeg("figures/figureS8.jpeg", width = 6.5, height = 7, units = "in", quality = 100, res = 300)
+print(final_activity)
+dev.off()
+```
+
+**Figure S8** Total and peak activity for (A-B) the activity monitor experiment and (C-D) the microhabitat use experiment. Raw data for (A, C) total activity are indicated with jittered points. The means (± SE) from the model predictions of a negative binomial linear model are represented by a large point and error bars for (A) the total number of laser breaks across 5 days and (B) the total number of photos where the spider’s position was different from the previous photo across the 1st night of the microhabitat use trials. Visualizations for the peak activity from (B) the activity monitor and (D) the photos taken during the 1st night of the microhabitat use trials. We found the 30-min bin where each spider had the largest number of activity measurements. We have shown the number of spiders that exhibited peak activity at each time of the day. Darkened areas represent times when the lights were off. The top of the circle indicates midnight (3.5 h since the lights went off) and the bottom is noon (15.5 h since the lights went off. (A-B) For the activity monitor, sex and site did not significantly vary in activity levels, and there are no visible differences in peak activity. (C-D) Spiders collected from urban sites exhibited higher activity (but greater variation) during the microhabitat use experiment. There are no clear differences in their peak activity. 
+
+# Figure S9
+
+```{r figure s9a}
+new_labels <- c("8B" = "Site: 8B\nAmplitude: -55 dB", "8A" = "Site: 8A \nAmplitude: -64 dB", "6C" = "Site: 6C \nAmplitude: -69 dB", "5A" = "Site: 5A \nAmplitude: -69 dB")
+
+seen <- ggplot() +
+  geom_bar(aes(y = reorder(ID, prop), x = photos, fill = seen), data = photos_seen, position = "fill", stat = "identity") +
+  ylab("Spider ID") +
+  xlab("Proportion of \nNight Photos") +
+  scale_fill_manual("", values = c("grey", "#7570b3"), labels = c("Unseen", "Visible")) +
+  guides(fill = guide_legend(reverse = TRUE)) +
+  th +
+  theme(legend.position = "top") +
+  facet_grid(rows = vars(Site), scales = "free", space = 'free', switch = "y", labeller = labeller(Site = new_labels))
+```
+
+```{r figure s9b}
+side <- ggplot() +
+  geom_bar(aes(y = reorder(ID, prop), x = photos, fill = side), data = photos_side, position = "fill", stat = "identity") +
+  geom_vline(xintercept = 0.5, linetype = "dashed") +
+  ylab("Spider ID") +
+  xlab("Proportion of Night \nPhotos with Spider Visible") +
+  scale_fill_manual("", values = c("#1b9e77", "#d95f02"), labels = c("Quiet", "Loud")) +
+  guides(fill = guide_legend(reverse = TRUE)) +
+  th +
+  theme(legend.position = "top") +
+  theme(axis.text.y = element_blank(),
+        axis.title.y = element_blank()) +
+  facet_grid(rows = vars(Site), scales = "free", space = 'free', switch = "y", labeller = labeller(Site = new_labels))
+
+```
+
+```{r figure S9 combine}
+photos_night <- ggarrange(seen, side, ncol = 2, widths = c(0.55, 0.45))
+
+jpeg("figures/figureS9.jpeg", width = 5, height = 6, units = "in", quality = 100, res = 300)
+print(photos_night)
+dev.off()
+
+photos_night
+```
+
+First observation and final silk mass added in powerpoint. 
+
+**Figure S9** Visualizations from the raspberry pi images from the microhabitat use experiment taken every 2 min during the 1st night of web-building for a subset of tested spiders. (A) The spider is not visible in every image, which could be the result of the photo angle or quality or that the spider was in the tunnel which was obstructed from view by the acoustic foam (Figure 2B). (B) Of the images where the spider is visible, no spider was only ever spotted on one side, and the chamber with the highest observations did not always align with the spider’s first daily position or the chamber with more dry silk mass. The first observation of spider position was taken during the day following the 1st night of web-building and the side that had higher dry silk mass was determined at the end of the experiment. Grey indicates an observation made in the tunnel whereas orange and green represent observations made in the loud or quiet chambers, respectively. 

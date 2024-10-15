@@ -1,0 +1,530 @@
+---
+title: "Data Wranlging"
+author: "Brandi Pessman"
+date: "2024-10-01"
+output: html_document
+---
+
+# Load Libraries
+
+```{r libraries}
+library(tidyverse) # for wrangling data
+library(lubridate) # for handling dates and times
+```
+
+# Import and Wrangle Data
+
+## Field Noise Data
+
+```{r import noise}
+datapath = "/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/recording_files"
+setwd(datapath)
+txt_files_ls = list.files(path = datapath, pattern = "*.txt")
+txt_files_df <- lapply(txt_files_ls, function(x) 
+    {read.table(file = x, header = TRUE, sep ="\t")})
+combined_dfl <- do.call("rbind", lapply(txt_files_df, as.data.frame))
+combined_dfl$Time <- strptime(combined_dfl$Time, format = "%H:%M:%S")
+combined_dfl$Hour <-hour(combined_dfl$Time)
+pca_results <- readRDS("/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/data/pca_results.rds")
+combined_dfl <- full_join(combined_dfl, pca_results, by = "Site")
+
+# Calculate the daily average leq for each 24-hour recording at each site
+dayavgl <- combined_dfl %>% 
+  mutate(Substrate = fct_recode(factor(Substrate), "Plant" = "Plant", "Manmade" = "Artificial", "Manmade" = "Artifical"),
+         Category = fct_relevel(Category, "Rural", "Urban")) %>% 
+  rename(Traffic_Impact = `Traffic Impact`) %>% 
+  group_by(Site, Visit, Mic, Category, Substrate, Material, Dim.1, Dim.2, Traffic_Impact) %>% 
+  summarize(mean_leq = mean(Leq, na.rm = TRUE), 
+            med_leq = median(Leq, na.rm = TRUE),
+            mean_aggent = mean(AggEnt, na.rm = TRUE)) %>% 
+  full_join(read.csv("../data/visit_date.csv", header = TRUE), by = c("Site", "Visit")) %>% 
+  mutate(Date = mdy(Date),
+         Day = as.numeric(yday(Date)),
+         Visit = factor(Visit))
+
+# Calculate the hourly average leq for each hour of the 24-hour recording at each site
+houravgcatl <- combined_dfl %>% 
+  group_by(Site, Visit, Mic, Hour, Category, Substrate, Material) %>% 
+  summarize(meanleq = mean(Leq, na.rm = TRUE),
+            med_leq = median(Leq, na.rm = TRUE)) %>% 
+  mutate(dark_light = as.numeric(ifelse(Hour >= 7, Hour - 7, Hour + 17)),
+         Category = fct_relevel(Category, "Rural", "Urban"))
+
+# get the average leq for each site
+siteavgl <- combined_dfl %>% 
+  group_by(Site, Category) %>% 
+  summarize(mean_leq = mean(Leq, na.rm = TRUE),
+            med_leq = median(Leq, na.rm = TRUE)) %>% 
+  mutate(Category = fct_relevel(Category, "Rural", "Urban"))
+
+
+saveRDS(dayavgl, "/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/wrangled_data/dayavgl.rds")
+saveRDS(houravgcatl, "/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/wrangled_data/houravgcatl.rds")
+saveRDS(siteavgl, "/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/wrangled_data/siteavgl.rds")
+```
+
+### Field Noise Frequencies
+
+```{r import noise frequencies}
+datapath = "/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/field_frequencies_5_86hz"
+setwd(datapath)
+txt_files_ls = list.files(path = datapath, pattern = "*.txt")
+txt_files_df <- lapply(txt_files_ls, 
+                       function(x){
+                         read.table(file = x, header = TRUE, sep ="\t")
+                         })
+for (i in 1:length(txt_files_df)){
+  txt_files_df[[i]] <- cbind(txt_files_df[[i]],txt_files_ls[i])
+  }
+main <- do.call("rbind", lapply(txt_files_df, as.data.frame))
+main <- main %>% 
+  dplyr::select(Low.Freq..Hz., Inband.Power..dB.FS., `txt_files_ls[i]`) 
+colnames(main) <- c("Low_Freq", "Power", "File")
+main <- main %>% 
+  separate_wider_delim(cols = File, names = c("Site", "Visit", "Recorder"), "_") %>% 
+  separate_wider_delim(cols = Recorder, names = c("Recorder", "Ext"), ".") %>% 
+  dplyr::select(Site, Visit, Recorder, Low_Freq, Power)
+
+substrates <- data.frame(Locations = c("Urban", "Urban", "Urban", "Urban", 
+                                       "Urban", "Urban", "Urban", "Urban",
+                                       "Urban", "Urban", "Urban", "Urban",
+                                       "Rural", "Rural", "Rural", "Rural",
+                                       "Rural", "Rural", "Rural", "Rural",
+                                       "Rural", "Rural", "Rural", "Rural"),
+                         Site = c("8B", "8B", "8B", "8B", 
+                                  "5C", "5C", "5C", "5C", 
+                                  "4A", "4A", "4A", "4A",
+                                  "6B", "6B", "6B", "6B", 
+                                  "6C", "6C", "6C", "6C", 
+                                  "5A", "5A", "5A", "5A"),
+                         Recorder = c("r7", "r8", "r9", "r10",
+                                      "r5", "r6", "r11", "r12",
+                                      "r1", "r2", "r7", "r8",
+                                      "r3", "r4", "r9", "r10",
+                                      "r5", "r6", "r11", "r12",
+                                      "r1", "r2", "r7", "r8"),
+                         Substrate = c("Concrete", "Concrete", "Shrub", "Shrub",
+                                       "Paneling", "Shrub", "Concrete", "Shrub",
+                                       "Wood", "Shrub", "Wood", "Shrub",
+                                       "Paneling", "Herb", "Metal", "Herb", 
+                                       "Concrete", "Shrub", "Concrete", "Shrub",
+                                       "Tree", "Metal", "Tree", "Metal"),
+                         Type = c("Manmade", "Manmade", "Plant", "Plant",
+                                  "Manmade", "Plant", "Manmade", "Plant",
+                                  "Manmade", "Plant", "Manmade", "Plant",
+                                  "Manmade", "Plant", "Manmade", "Plant",
+                                  "Manmade", "Plant", "Manmade", "Plant",
+                                  "Plant", "Manmade", "Plant", "Manmade"))
+
+main <- left_join(main, substrates, by = c("Site", "Recorder"))
+
+main_site <- main %>% 
+  group_by(Site, Locations, Type, Low_Freq) %>% 
+  summarize(mean_power = mean(Power),
+            se_power = plotrix::std.error(Power)) %>% 
+  mutate(Site = factor(Site),
+         Site = fct_relevel(Site, "8B", "5C", "4A", "5A", "6C", "6B"))
+
+main_site_manmade <- main %>% 
+  filter(Type == "Manmade",
+         Low_Freq >= 20 & Low_Freq < 1000) %>% 
+  group_by(Site, Locations, Low_Freq, Recorder, Substrate) %>% 
+  summarize(mean_power = mean(Power),
+            se_power = plotrix::std.error(Power)) %>% 
+    mutate(Site = factor(Site),
+         Site = fct_relevel(Site, "8B", "5C", "4A", "5A", "6C", "6B"))
+
+main2 <- main %>% 
+  group_by(Site, Locations, Type, Low_Freq) %>% 
+  summarize(mean_power = mean(Power),
+            se_power = plotrix::std.error(Power)) %>% 
+  mutate(Site = factor(Site),
+         Site = fct_relevel(Site, "8B", "5C", "4A", "5A", "6C", "6B"))
+
+saveRDS(main_site_manmade, "../wrangled_data/field_freq_site_manmade.rds")
+saveRDS(main2, "../wrangled_data/field_freq.rds")
+```
+
+## Microhabitat Use Data
+
+```{r import microhabitat}
+choice <- read.csv("data/choice.csv", header = TRUE) %>% 
+  mutate(Origin = as.factor(Origin), 
+         # change origin from loud and quiet ot urban and rural
+         Origin = fct_recode(Origin, "Urban" = "Loud", "Rural" = "Quiet"),
+         # put rural first
+         Origin = fct_relevel(Origin, "Rural", "Urban"),
+         # categorize site
+         Site = factor(Site),
+         # orders sites in increasing noise order
+         Site = fct_relevel(Site, "5A", "6C", "8A", "8B"),
+         # give sites a continuous variable from 1 to 4 
+         Site_ord = ifelse(Site == "6C", 1, 
+                        ifelse(Site == "5A", 2, 
+                               ifelse(Site == "8A", 3, 4))), 
+         # since it isn't clear whether 6C or 5A should go first, let's also flip them
+         Site_ord2 = ifelse(Site == "6C", 2, 
+                        ifelse(Site == "5A", 1, 
+                               ifelse(Site == "8A", 3, 4))), 
+         # let's use the molt day as 1 day old instead of 0 days old
+         Age = Age + 1,
+         # mass is given as grams; let's convert them to milligrams
+         mass_mg = before_spider_mass * 1000,
+         # to calculate condition, we need log mass and log cephalothorax width
+         log_mass_mg = log(mass_mg), 
+         log_ceph_mm = log(ceph_width_mm)) %>% 
+  # make the side with more silk a binary variable where loud is 1 and quiet is 0
+  mutate(side = ifelse(side_w_more == "loud", 1, 0),
+         # add associated site average Leq with each site
+         mean_leq = ifelse(Site == "5A", -69,
+                           ifelse(Site == "6C", -69,
+                                  ifelse(Site == "8A", -64, -55))),
+         # correct each silk measure (in micrograms) by volume
+         loud_silk_v = (loud_silk * 1000) / 413.34,
+         quiet_silk_v = (quiet_silk * 1000) / 413.34,
+         tunnel_silk_v = (tunnel_silk * 1000) / 39.208,
+         # get proportion of silk in loud (excluding tunnel)
+         propl = loud_silk / (loud_silk + quiet_silk),
+         # get proportion of silk in loud (with tunnel)
+         propl_tunnel = loud_silk / (loud_silk + quiet_silk + tunnel_silk),
+         proplv = loud_silk_v / (loud_silk_v + quiet_silk_v + tunnel_silk_v),
+         # get proportion of silk in quiet (with tunnel)
+         propq_tunnel = quiet_silk / (loud_silk + quiet_silk + tunnel_silk),
+         propqv = quiet_silk_v / (loud_silk_v + quiet_silk_v + tunnel_silk_v),
+         # get proportion of silk in tunnel
+         propt_tunnel = tunnel_silk / (loud_silk + quiet_silk + tunnel_silk),
+         proptv = tunnel_silk_v / (loud_silk_v + quiet_silk_v + tunnel_silk_v),
+         # get proportional difference between sides (without tunnel)
+         prop_diff = abs(propl - (1 - propl)),
+         # get proportional difference between side (with tunnel)
+         prop_diff_tunnel = abs(propl_tunnel - propq_tunnel),
+         # total silk on loud and quiet side
+         total_micro = (loud_silk + quiet_silk) * 1000,
+         # total silk including tunnel
+         total_micro_tunnel = (loud_silk + quiet_silk + tunnel_silk) * 1000,
+         # assign 1 if left side has more silk or 0 if right
+         side_lr = ifelse(side_w_more == left, 1, 0))
+
+# Site subsets
+choice_8B <- choice %>% 
+  filter(Site == "8B")
+choice_8A <- choice %>% 
+  filter(Site == "8A")
+choice_6C <- choice %>% 
+  filter(Site == "6C")
+choice_5A <- choice %>% 
+  filter(Site == "5A")
+
+# calculates spider condition - the residuals of the linear model with log mass and log cephalothorax width
+rownames(choice) <- c(choice$ID)
+cond <- data.frame(cbind(condition = residuals(lm(log_mass_mg ~ log_ceph_mm, data = choice)),
+                         ID = names(residuals(lm(log_mass_mg ~ log_ceph_mm, data = choice)))))
+# add condition to the choice dataset
+choice <- full_join(choice, cond, by = "ID") %>% 
+  mutate(condition = as.numeric(condition))
+
+#now subsets
+#8B
+rownames(choice_8B) <- c(choice_8B$ID)
+cond_8B <- data.frame(cbind(condition = residuals(lm(log_mass_mg ~ log_ceph_mm, data = choice_8B)),
+                         ID = names(residuals(lm(log_mass_mg ~ log_ceph_mm, data = choice_8B)))))
+choice_8B <- full_join(choice_8B, cond_8B, by = "ID") %>% 
+  mutate(condition = as.numeric(condition))
+#8A
+rownames(choice_8A) <- c(choice_8A$ID)
+cond_8A <- data.frame(cbind(condition = residuals(lm(log_mass_mg ~ log_ceph_mm, data = choice_8A)),
+                         ID = names(residuals(lm(log_mass_mg ~ log_ceph_mm, data = choice_8A)))))
+choice_8A <- full_join(choice_8A, cond_8A, by = "ID") %>% 
+  mutate(condition = as.numeric(condition))
+#6C
+rownames(choice_6C) <- c(choice_6C$ID)
+cond_6C <- data.frame(cbind(condition = residuals(lm(log_mass_mg ~ log_ceph_mm, data = choice_6C)),
+                         ID = names(residuals(lm(log_mass_mg ~ log_ceph_mm, data = choice_6C)))))
+choice_6C <- full_join(choice_6C, cond_6C, by = "ID") %>% 
+  mutate(condition = as.numeric(condition))
+#5A
+rownames(choice_5A) <- c(choice_5A$ID)
+cond_5A <- data.frame(cbind(condition = residuals(lm(log_mass_mg ~ log_ceph_mm, data = choice_5A)),
+                         ID = names(residuals(lm(log_mass_mg ~ log_ceph_mm, data = choice_5A)))))
+choice_5A <- full_join(choice_5A, cond_5A, by = "ID") %>% 
+  mutate(condition = as.numeric(condition))
+
+choice <- choice %>% 
+  # order the variables nicely
+  dplyr::select(ID, Site, Site_ord, Site_ord2, Origin,  Age, condition, Attack_time, Web_height, Sub_height, web_prop, Web_Length, Web_Width, Web_Area, collect_mass_mg, mean_leq, side_w_more, side, side_lr, propl, propl_tunnel, propq_tunnel, propt_tunnel, proplv, propqv, proptv, total_micro, total_micro_tunnel, loud_silk, quiet_silk, tunnel_silk, loud_silk_v, quiet_silk_v, tunnel_silk_v, prop_diff, prop_diff_tunnel, day1_spider_side, day2_spider_side, day3_spider_side, day4_spider_side)
+
+choice_8B <- choice_8B %>% 
+  # order the variables nicely
+  dplyr::select(ID, Site, Site_ord, Site_ord2, Origin,  Age, condition, mean_leq, side_w_more, side, side_lr, propl, propl_tunnel, propq_tunnel, propt_tunnel, proplv, propqv, proptv, total_micro, total_micro_tunnel, loud_silk, quiet_silk, tunnel_silk, loud_silk_v, quiet_silk_v, tunnel_silk_v, prop_diff, prop_diff_tunnel, day1_spider_side, day2_spider_side, day3_spider_side, day4_spider_side)
+
+choice_8A <- choice_8A %>% 
+  # order the variables nicely
+  dplyr::select(ID, Site, Site_ord, Site_ord2, Origin,  Age, condition, mean_leq, side_w_more, side, side_lr, propl, propl_tunnel, propq_tunnel, propt_tunnel, proplv, propqv, proptv, total_micro, total_micro_tunnel, loud_silk, quiet_silk, tunnel_silk, loud_silk_v, quiet_silk_v, tunnel_silk_v, prop_diff, prop_diff_tunnel, day1_spider_side, day2_spider_side, day3_spider_side, day4_spider_side)
+
+choice_6C <- choice_6C %>% 
+  # order the variables nicely
+  dplyr::select(ID, Site, Site_ord, Site_ord2, Origin,  Age, condition, mean_leq, side_w_more, side, side_lr, propl, propl_tunnel, propq_tunnel, propt_tunnel, proplv, propqv, proptv, total_micro, total_micro_tunnel, loud_silk, quiet_silk, tunnel_silk, loud_silk_v, quiet_silk_v, tunnel_silk_v, prop_diff, prop_diff_tunnel, day1_spider_side, day2_spider_side, day3_spider_side, day4_spider_side)
+
+choice_5A <- choice_5A %>% 
+  # order the variables nicely
+  dplyr::select(ID, Site, Site_ord, Site_ord2, Origin,  Age, condition, mean_leq, side_w_more, side, side_lr, propl, propl_tunnel, propq_tunnel, propt_tunnel, proplv, propqv, proptv, total_micro, total_micro_tunnel, loud_silk, quiet_silk, tunnel_silk, loud_silk_v, quiet_silk_v, tunnel_silk_v, prop_diff, prop_diff_tunnel, day1_spider_side, day2_spider_side, day3_spider_side, day4_spider_side)
+
+choice_by_day <- choice %>% 
+  dplyr::select(ID, Site, Origin, mean_leq,  Age, condition, day1_spider_side, day2_spider_side, day3_spider_side, day4_spider_side) %>% 
+  # make four rows for each spider, one for each day
+  pivot_longer(cols = day1_spider_side:day4_spider_side, values_to = "side_lq", names_to = "day") %>%
+  mutate(day = fct_recode(day, "1" = "day1_spider_side", "2" = "day2_spider_side", "3" = "day3_spider_side", "4" = "day4_spider_side"),
+         day = as.numeric(day)) %>% 
+  mutate(ID = factor(ID),
+    Site = fct_recode(Site, "Site 5A" = "5A", "Site 6C" = "6C", "Site 8A" = "8A", "Site 8B" = "8B"),
+    side_lq = factor(side_lq),
+         side_lq = fct_recode(side_lq, "Loud" = "loud", "Quiet" = "quiet", "Tunnel" = "tunnel"))
+
+choice_by_day_8B <- choice_8B %>% 
+  dplyr::select(ID, Site, Origin, mean_leq,  Age, condition, day1_spider_side, day2_spider_side, day3_spider_side, day4_spider_side) %>% 
+  # make four rows for each spider, one for each day
+  pivot_longer(cols = day1_spider_side:day4_spider_side, values_to = "side_lq", names_to = "day") %>%
+  mutate(day = fct_recode(day, "1" = "day1_spider_side", "2" = "day2_spider_side", "3" = "day3_spider_side", "4" = "day4_spider_side"),
+         day = as.numeric(day))  %>% 
+  mutate(ID = factor(ID),
+    side_lq = factor(side_lq),
+         side_lq = fct_recode(side_lq, "Loud" = "loud", "Quiet" = "quiet", "Tunnel" = "tunnel"))
+
+choice_by_day_8A <- choice_8A %>% 
+  dplyr::select(ID, Site, Origin, mean_leq,  Age, condition, day1_spider_side, day2_spider_side, day3_spider_side, day4_spider_side) %>% 
+  # make four rows for each spider, one for each day
+  pivot_longer(cols = day1_spider_side:day4_spider_side, values_to = "side_lq", names_to = "day") %>%
+  mutate(day = fct_recode(day, "1" = "day1_spider_side", "2" = "day2_spider_side", "3" = "day3_spider_side", "4" = "day4_spider_side"),
+         day = as.numeric(day)) %>% 
+  mutate(ID = factor(ID),
+    side_lq = factor(side_lq),
+         side_lq = fct_recode(side_lq, "Loud" = "loud", "Quiet" = "quiet", "Tunnel" = "tunnel"))
+
+choice_by_day_6C <- choice_6C %>% 
+  dplyr::select(ID, Site, Origin, mean_leq,  Age, condition, day1_spider_side, day2_spider_side, day3_spider_side, day4_spider_side) %>% 
+  # make four rows for each spider, one for each day
+  pivot_longer(cols = day1_spider_side:day4_spider_side, values_to = "side_lq", names_to = "day") %>%
+  mutate(day = fct_recode(day, "1" = "day1_spider_side", "2" = "day2_spider_side", "3" = "day3_spider_side", "4" = "day4_spider_side"),
+         day = as.numeric(day)) %>% 
+  mutate(ID = factor(ID),
+    side_lq = factor(side_lq),
+         side_lq = fct_recode(side_lq, "Loud" = "loud", "Quiet" = "quiet", "Tunnel" = "tunnel"))
+
+choice_by_day_5A <- choice_5A %>% 
+  dplyr::select(ID, Site, Origin, mean_leq,  Age, condition, day1_spider_side, day2_spider_side, day3_spider_side, day4_spider_side) %>% 
+  # make four rows for each spider, one for each day
+  pivot_longer(cols = day1_spider_side:day4_spider_side, values_to = "side_lq", names_to = "day") %>%
+  mutate(day = fct_recode(day, "1" = "day1_spider_side", "2" = "day2_spider_side", "3" = "day3_spider_side", "4" = "day4_spider_side"),
+         day = as.numeric(day)) %>% 
+  mutate(ID = factor(ID),
+    side_lq = factor(side_lq),
+         side_lq = fct_recode(side_lq, "Loud" = "loud", "Quiet" = "quiet", "Tunnel" = "tunnel"))
+
+saveRDS(choice, "/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/wrangled_data/choice.rds")
+saveRDS(choice_8B, "/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/wrangled_data/choice_8B.rds")
+saveRDS(choice_8A, "/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/wrangled_data/choice_8A.rds")
+saveRDS(choice_6C, "/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/wrangled_data/choice_6C.rds")
+saveRDS(choice_5A, "/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/wrangled_data/choice_5A.rds")
+
+saveRDS(choice_by_day, "/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/wrangled_data/choice_by_day.rds")
+saveRDS(choice_by_day_8B, "/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/wrangled_data/choice_by_day_8B.rds")
+saveRDS(choice_by_day_8A, "/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/wrangled_data/choice_by_day_8A.rds")
+saveRDS(choice_by_day_6C, "/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/wrangled_data/choice_by_day_6C.rds")
+saveRDS(choice_by_day_5A, "/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/wrangled_data/choice_by_day_5A.rds")
+```
+
+### Chamber Frequencies
+
+```{r import choice chamber frequencies}
+datapath = "/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/chamber_5_86hz/"
+setwd(datapath)
+txt_files_ls = list.files(path = datapath, pattern = "*.txt")
+txt_files_df <- lapply(txt_files_ls, 
+                       function(x){
+                         read.table(file = x, header = TRUE, sep ="\t")
+                         })
+for (i in 1:length(txt_files_df)){
+  txt_files_df[[i]] <- cbind(txt_files_df[[i]],txt_files_ls[i])
+  }
+main <- do.call("rbind", lapply(txt_files_df, as.data.frame))
+main <- main %>% 
+  dplyr::select(Low.Freq..Hz., Inband.Power..dB.FS., `txt_files_ls[i]`) 
+colnames(main) <- c("Low_Freq", "Power", "File")
+main <- main %>% 
+  separate_wider_delim(cols = File, names = c("Tub", "Place", "Chamber", "Location", "Position"), "_") %>% 
+  separate_wider_delim(cols = Position, names = c("Position", "Ext"), ".") %>% 
+  dplyr::select(Tub, Place, Chamber, Location, Position, Low_Freq, Power)
+
+bottom <- main %>% 
+  filter(Location == "bottom", 
+         Position == "middle") %>% 
+  mutate(Chamber = factor(Chamber), 
+         Chamber = fct_relevel(Chamber, "quiet", "loud", "tunnel")) %>% 
+  group_by(Chamber, Low_Freq) %>% 
+  summarize(mean = mean(Power),
+            se = plotrix::std.error(Power))
+
+farside <- main %>% 
+  filter(Location == "farside", 
+         Position == "middle") %>% 
+  mutate(Chamber = factor(Chamber), 
+         Chamber = fct_relevel(Chamber, "quiet", "loud")) %>% 
+  group_by(Chamber, Low_Freq) %>% 
+  summarize(mean = mean(Power),
+            se = plotrix::std.error(Power))
+
+saveRDS(bottom, "../wrangled_data/bottom_freq.rds")
+saveRDS(farside, "../wrangled_data/farside_freq.rds")
+```
+
+## Activity Data
+
+```{r import activity}
+# ACTIVITY MONITOR
+activity <- read.csv("data/activity.csv") %>% 
+  dplyr::select(SpiderID:Peak5) %>% 
+  mutate(Site = fct_relevel(Site, "Forest", "Campus"))
+
+activity_peak <- read.csv("data/activity.csv") %>% 
+  dplyr::select(SpiderID:Peak5, -TotalActivity) %>% 
+  pivot_longer(cols = c(Peak1:Peak5), names_to = "Day", values_to = "PeakHour") %>% 
+  mutate(Site = fct_relevel(Site, "Forest", "Campus"),
+         Day = fct_recode(factor(Day), "1" = "Peak1", "2" = "Peak2", "3" = "Peak3", "4" = "Peak4", "5" = "Peak5"),
+         PeakHour = as.numeric(PeakHour),
+         PeakHour = PeakHour - 0.5,
+         PeakHour = ifelse(PeakHour < 0, PeakHour + 24, PeakHour)) %>% 
+  #change to hours since lights off
+  mutate(PeakHour = ifelse(PeakHour <= 10.5, PeakHour + 13, PeakHour -11),
+         Site = fct_relevel(Site, "Forest", "Campus"))
+
+activity_total <- read.csv("data/activity.csv") %>% 
+  dplyr::select(SpiderID:TotalActivity) %>% 
+  mutate(Site = fct_relevel(Site, "Forest", "Campus")) 
+
+# CHOICE PHOTOS
+photos_night <- read.csv("data/choice_photos.csv", header = TRUE) %>% 
+  dplyr::select(ID:X07.00) %>% 
+  pivot_longer(cols = c("X20.30":"X07.00"), values_to = "active", names_to = "hour") %>% 
+  mutate(hour = fct_recode(hour, 
+                           "20.5" = "X20.30",
+                           "21.5" = "X21.30",
+                           "22.5" = "X22.30",
+                           "23.5" = "X23.30",
+                           "0.5" = "X00.30",
+                           "1.5" = "X01.30",
+                           "2.5" = "X02.30",
+                           "3.5" = "X03.30",
+                           "4.5" = "X04.30",
+                           "5.5" = "X05.30",
+                           "6.5" = "X06.30",
+                           "21" = "X21.00",
+                           "22" = "X22.00",
+                           "23" = "X23.00",
+                           "0" = "X00.00",
+                           "1" = "X01.00",
+                           "2" = "X02.00",
+                           "3" = "X03.00",
+                           "4" = "X04.00",
+                           "5" = "X05.00",
+                           "6" = "X06.00",
+                           "7" = "X07.00"
+                           )) %>% 
+  dplyr::select(ID, Origin, hour, active) %>% 
+  mutate(hour = as.character(hour),
+         hour = as.numeric(hour)) %>% 
+  mutate(Origin = fct_recode(Origin, "Rural" = "Quiet", "Urban" = "Loud"))
+
+photo_night_peaks <- photos_night %>% 
+  group_by(ID) %>% 
+  summarize(active = max(active))
+
+photo_night_peaks <- left_join(photo_night_peaks, photos_night, by=c("ID", "active")) %>%
+  mutate(PeakHour = ifelse(hour > 20, hour-20.5, hour+3.5),
+         Origin = fct_relevel(Origin, "Rural", "Urban"))
+
+photo_night_total <- photos_night %>% 
+  group_by(ID, Origin) %>% 
+  summarize(TotalActivity = sum(active)) %>% 
+  mutate(Origin = fct_relevel(Origin, "Rural", "Urban"))
+
+photos_seen <- read.csv("data/choice_photos.csv", header = TRUE) %>% 
+  mutate(prop = night_loud / (night_loud + night_quiet)) %>% 
+  pivot_longer(cols = c(night_unseen, night_seen), values_to = "photos", names_to = "seen") %>% 
+  mutate(seen = fct_recode(seen, "Yes" = "night_seen", "No" = "night_unseen"),
+         seen = fct_relevel(seen, "No", "Yes"))
+
+photos_side <- read.csv("data/choice_photos.csv", header = TRUE) %>% 
+  mutate(prop = night_loud / (night_loud + night_quiet)) %>% 
+  pivot_longer(cols = c(night_loud, night_quiet), values_to = "photos", names_to = "side") %>% 
+  mutate(side = fct_recode(side, "Loud" = "night_loud", "Quiet" = "night_quiet"),
+         side = fct_relevel(side, "Quiet", "Loud"))
+
+activity_hours <- read.csv("data/choice_photos.csv", header = TRUE) %>% 
+  mutate(X21 = X21.00 + X21.30,
+         X22 = X22.00 + X22.30,
+         X23 = X23.00 + X23.30,
+         X00 = X00.00 + X00.30,
+         X01 = X01.00 + X01.30,
+         X02 = X02.00 + X02.30,
+         X03 = X03.00 + X03.30,
+         X04 = X04.00 + X04.30,
+         X05 = X05.00 + X05.30,
+         X06 = X06.00 + X06.30,
+         X07 = X07.00 + X07.30,
+         X08 = X08.00 + X08.30,
+         X09 = X09.00 + X09.30,
+         X10 = X10.00 + X10.30,
+         X11 = X11.00 + X11.30,
+         X12 = X12.00 + X12.30,
+         X13 = X13.00 + X13.30,
+         X14 = X14.00 + X14.30,
+         X15 = X15.00 + X15.30,
+         X16 = X16.00 + X16.30,
+         X17 = X17.00 + X17.30,
+         X18 = X18.00 + X18.30,
+         X19 = X19.00 + X19.30,
+         X20 = X20.00 + X20.30) %>% 
+  pivot_longer(cols = c("X20":"X21"), values_to = "active", names_to = "hour") %>% 
+  mutate(hour = fct_recode(hour, 
+                           "20" = "X20",
+                           "21" = "X21",
+                           "22" = "X22",
+                           "23" = "X23",
+                           "0" = "X00",
+                           "1" = "X01",
+                           "2" = "X02",
+                           "3" = "X03",
+                           "4" = "X04",
+                           "5" = "X05",
+                           "6" = "X06",
+                           "7" = "X07",
+                           "8" = "X08",
+                           "9" = "X09",
+                           "10" = "X10",
+                           "11" = "X11",
+                           "12" = "X12",
+                           "13" = "X13",
+                           "14" = "X14",
+                           "15" = "X15",
+                           "16" = "X16",
+                           "17" = "X17",
+                           "18" = "X18",
+                           "19" = "X19",
+                           "20" = "X20"
+                           )) %>% 
+  mutate(hour = as.character(hour),
+         hour = as.numeric(hour)) %>% 
+  group_by(hour, Origin) %>% 
+  summarize(mean = mean(active, na.rm = TRUE)) %>% 
+  pivot_wider(names_from = "Origin", values_from = "mean")
+
+saveRDS(activity, "/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/wrangled_data/activity.rds")
+saveRDS(activity_peak, "/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/wrangled_data/activity_peak.rds")
+saveRDS(activity_total, "/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/wrangled_data/activity_total.rds")
+saveRDS(photo_night_peaks, "/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/wrangled_data/photo_night_peaks.rds")
+saveRDS(photo_night_total, "/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/wrangled_data/photo_night_total.rds")
+saveRDS(photos_seen, "/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/wrangled_data/photos_seen.rds")
+saveRDS(photos_side, "/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/wrangled_data/photos_side.rds")
+saveRDS(activity_hours, "/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/wrangled_data/activity_hours.rds")
+
+```

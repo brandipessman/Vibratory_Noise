@@ -1,0 +1,398 @@
+---
+title: "Choice Trial Vibration Map"
+author: "Brandi Pessman"
+date: "2024-10-04"
+output: html_document
+---
+
+# Load Libraries
+
+```{r libraries}
+library(tidyverse)
+library(ggpubr)
+```
+
+# Import Data
+
+```{r import}
+vibration_map <- read.delim("data/choice_vibration_map.txt") %>% 
+  mutate(column = ifelse(Position == "1" | Position == "4"| Position == "7", "col1",
+                         ifelse(Position == "2" | Position == "5" | Position == "8", "col2", "col3")),
+         row = ifelse(Position == "1" | Position == "2"| Position == "3", "row3",
+                         ifelse(Position == "4" | Position == "5" | Position == "6", "row2", "row1"))) %>% 
+  filter(High_Freq == 1000) 
+```
+
+# Loud Chamber
+
+## Bottom
+
+```{r bottom loud}
+bottom_loud <- vibration_map %>% 
+  filter(Container == "Loud", 
+         Side == "Bottom") %>% 
+  dplyr::select(column, row, Leq)
+
+botl <- ggplot(bottom_loud, aes(column, row)) +
+  geom_tile(aes(fill = Leq), color = "black", size = 1) +
+  #geom_text(aes(label = round(Leq, 1))) +
+  #ggtitle("Bottom") +
+  #scale_fill_gradient(low = "white", high = "red", limits = c(0, 25)) +
+  scale_fill_gradient(low = "white", high = "red", limits = c(min(vibration_map$Leq), max(vibration_map$Leq))) +
+  theme_classic() +
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        line = element_blank(),
+        legend.position = "none")
+```
+
+## A 
+
+```{r a loud}
+a_loud <- vibration_map %>% 
+  filter(Container == "Loud", 
+         Side == "A") %>% 
+  dplyr::select(column, row, Leq)
+
+al <- ggplot(a_loud, aes(column, row)) +
+  geom_tile(aes(fill = Leq), color = "black", size = 1) +
+  #geom_text(aes(label = round(Leq, 1))) +
+  #ggtitle("A Side") +
+  #scale_fill_gradient(low = "white", high = "red", limits = c(0, 25)) +
+  scale_fill_gradient(low = "white", high = "red", limits = c(min(vibration_map$Leq), max(vibration_map$Leq))) +
+  theme_classic() +
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        line = element_blank(),
+        legend.position = "none")
+```
+
+## B 
+
+```{r b loud}
+b_loud <- vibration_map %>% 
+  filter(Container == "Loud", 
+         Side == "B") %>% 
+  dplyr::select(column, row, Leq)
+
+bl <- ggplot(b_loud, aes(column, row)) +
+  geom_tile(aes(fill = Leq), color = "black", size = 1) +
+  #geom_text(aes(label = round(Leq, 1))) +
+  #ggtitle("B Side") +
+  #scale_fill_gradient(low = "white", high = "red", limits = c(0, 25)) +
+  scale_fill_gradient(low = "white", high = "red", limits = c(min(vibration_map$Leq), max(vibration_map$Leq))) +
+  theme_classic() +
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        line = element_blank(),
+        legend.position = "none")
+```
+
+## C 
+
+```{r c loud}
+c_loud <- vibration_map %>% 
+  filter(Container == "Loud", 
+         Side == "C") %>% 
+  dplyr::select(column, row, Leq)
+
+cl <- ggplot(c_loud, aes(column, row)) +
+  geom_tile(aes(fill = Leq), color = "black", size = 1) +
+  #geom_text(aes(label = round(Leq, 1))) +
+  #ggtitle("C Side") +
+  #scale_fill_gradient(low = "white", high = "red", limits = c(0, 25)) +
+  scale_fill_gradient(low = "white", high = "red", limits = c(min(vibration_map$Leq), max(vibration_map$Leq))) +
+  theme_classic() +
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        line = element_blank(),
+        legend.position = "none")
+```
+
+## D 
+
+```{r d loud}
+d_loud <- vibration_map %>% 
+  filter(Container == "Loud", 
+         Side == "D") %>% 
+  dplyr::select(column, row, Leq)
+
+dl <- ggplot(d_loud, aes(column, row)) +
+  geom_tile(aes(fill = Leq), color = "black", size = 1) +
+  #geom_text(aes(label = round(Leq, 1))) +
+  #ggtitle("D Side") +
+  #scale_fill_gradient(low = "white", high = "red", limits = c(0, 25)) +
+  scale_fill_gradient(low = "white", high = "red", limits = c(min(vibration_map$Leq), max(vibration_map$Leq))) +
+  theme_classic() +
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        line = element_blank(),
+        legend.position = "none")
+```
+
+# Quiet Chamber
+
+## Bottom
+
+```{r bottom quiet}
+bottom_quiet <- vibration_map %>% 
+  filter(Container == "Quiet", 
+         Side == "Bottom") %>% 
+  dplyr::select(column, row, Leq)
+
+botq <- ggplot(bottom_quiet, aes(column, row)) +
+  geom_tile(aes(fill = Leq), color = "black", size = 1) +
+  #geom_text(aes(label = round(Leq, 1))) +
+  #ggtitle("Bottom") +
+  #scale_fill_gradient(low = "white", high = "red", limits = c(0, 25)) +
+  scale_fill_gradient(low = "white", high = "red", limits = c(min(vibration_map$Leq), max(vibration_map$Leq))) +
+  theme_classic() + 
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        line = element_blank(),
+        legend.position = "none")
+```
+
+## A 
+
+```{r a quiet}
+a_quiet <- vibration_map %>% 
+  filter(Container == "Quiet", 
+         Side == "A") %>% 
+  dplyr::select(column, row, Leq)
+
+aq <- ggplot(a_quiet, aes(column, row)) +
+  geom_tile(aes(fill = Leq), color = "black", size = 1) +
+  #geom_text(aes(label = round(Leq, 1))) +
+  #ggtitle("A Side") +
+  #scale_fill_gradient(low = "white", high = "red", limits = c(0, 25)) +
+  scale_fill_gradient(low = "white", high = "red", limits = c(min(vibration_map$Leq), max(vibration_map$Leq))) +
+  theme_classic() +
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        line = element_blank(),
+        legend.position = "none")
+```
+
+## B 
+
+```{r b quiet}
+b_quiet <- vibration_map %>% 
+  filter(Container == "Quiet", 
+         Side == "B") %>% 
+  dplyr::select(column, row, Leq)
+
+bq <- ggplot(b_quiet, aes(column, row)) +
+  geom_tile(aes(fill = Leq), color = "black", size = 1) +
+  #geom_text(aes(label = round(Leq, 1))) +
+  #ggtitle("B Side") +
+  #scale_fill_gradient(low = "white", high = "red", limits = c(0, 25)) +
+  scale_fill_gradient(low = "white", high = "red", limits = c(min(vibration_map$Leq), max(vibration_map$Leq))) +
+  theme_classic() +
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        line = element_blank(),
+        legend.position = "none")
+```
+
+## C 
+
+```{r c quiet}
+c_quiet <- vibration_map %>% 
+  filter(Container == "Quiet", 
+         Side == "C") %>% 
+  dplyr::select(column, row, Leq)
+
+cq <- ggplot(c_quiet, aes(column, row)) +
+  geom_tile(aes(fill = Leq), color = "black", size = 1) +
+  #geom_text(aes(label = round(Leq, 1))) +
+  #ggtitle("C Side") +
+  #scale_fill_gradient(low = "white", high = "red", limits = c(0, 25)) +
+  scale_fill_gradient(low = "white", high = "red", limits = c(min(vibration_map$Leq), max(vibration_map$Leq))) +
+  theme_classic() +
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        line = element_blank(),
+        legend.position = "none")
+```
+
+## D 
+
+```{r d quiet}
+d_quiet <- vibration_map %>% 
+  filter(Container == "Quiet", 
+         Side == "D") %>% 
+  dplyr::select(column, row, Leq)
+
+dq <- ggplot(d_quiet, aes(column, row)) +
+  geom_tile(aes(fill = Leq), color = "black", size = 1) +
+  #geom_text(aes(label = round(Leq, 1))) +
+  #ggtitle("D Side") +
+  #scale_fill_gradient(low = "white", high = "red", limits = c(0, 25)) +
+  scale_fill_gradient(low = "white", high = "red", limits = c(min(vibration_map$Leq), max(vibration_map$Leq))) +
+  theme_classic() +
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        line = element_blank(),
+        legend.position = "none")
+```
+
+# Tunnel
+
+## Bottom
+
+```{r bottom tunnel}
+tunnel_bottom <- vibration_map %>% 
+  dplyr::select(File:Position, High_Freq, Leq) %>% 
+  filter(Container == "Tunnel",
+         Side == "Bottom") %>% 
+  dplyr::select(Position, High_Freq, Leq)
+
+tbot <- ggplot(tunnel_bottom, aes(Position, High_Freq)) +
+  geom_tile(aes(fill = Leq), color = "black", size = 1) +
+  #geom_text(aes(label = round(Leq, 1))) +
+  #ggtitle("Bottom") +
+  #scale_fill_gradient(low = "white", high = "red", limits = c(0, 25)) +
+  scale_fill_gradient(low = "white", high = "red", limits = c(min(vibration_map$Leq), max(vibration_map$Leq))) +
+  theme_classic() +
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        line = element_blank(),
+        legend.position = "none")
+```
+
+## A 
+
+```{r a tunnel}
+tunnel_a <- vibration_map %>% 
+  dplyr::select(File:Position, High_Freq, Leq) %>% 
+  filter(Container == "Tunnel",
+         Side == "A") %>% 
+  dplyr::select(Position, High_Freq, Leq)
+
+ta <- ggplot(tunnel_a, aes(Position, High_Freq)) +
+  geom_tile(aes(fill = Leq), color = "black", size = 1) +
+  #geom_text(aes(label = round(Leq, 1))) +
+  #ggtitle("A Side") +
+  #scale_fill_gradient(low = "white", high = "red", limits = c(0, 25)) +
+  scale_fill_gradient(low = "white", high = "red", limits = c(min(vibration_map$Leq), max(vibration_map$Leq))) +
+  theme_classic() +
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        line = element_blank(),
+        legend.position = "none")
+```
+
+## B 
+
+```{r b tunnel}
+tunnel_b <- vibration_map %>% 
+  dplyr::select(File:Position, High_Freq, Leq) %>% 
+  filter(Container == "Tunnel",
+         Side == "B") %>% 
+  dplyr::select(Position, High_Freq, Leq)
+
+tb <- ggplot(tunnel_b, aes(Position, High_Freq)) +
+  geom_tile(aes(fill = Leq), color = "black", size = 1) +
+  #geom_text(aes(label = round(Leq, 1))) +
+  #ggtitle("B Side") +
+  #scale_fill_gradient(low = "white", high = "red", limits = c(0, 25)) +
+  scale_fill_gradient(low = "white", high = "red", limits = c(min(vibration_map$Leq), max(vibration_map$Leq))) +
+  theme_classic() +
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        line = element_blank(),
+        legend.position = "none")
+```
+
+## Top
+
+```{r top tunnel}
+tunnel_top <- vibration_map %>% 
+  dplyr::select(File:Position, High_Freq, Leq) %>% 
+  filter(Container == "Tunnel",
+         Side == "Top") %>% 
+  dplyr::select(Position, High_Freq, Leq)
+
+ttop <- ggplot(tunnel_top, aes(Position, High_Freq)) +
+  geom_tile(aes(fill = Leq), color = "black", size = 1) +
+  #geom_text(aes(label = round(Leq, 1))) +
+  #ggtitle("Top") +
+  #scale_fill_gradient(low = "white", high = "red", limits = c(0, 25)) +
+  scale_fill_gradient(low = "white", high = "red", limits = c(min(vibration_map$Leq), max(vibration_map$Leq))) +
+  theme_classic() +
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        line = element_blank(),
+        legend.position = "none")
+```
+
+# Combine
+
+```{r combine plots}
+blankPlot <- ggplot()+geom_blank(aes(1,1)) + 
+  cowplot::theme_nothing() 
+loud <- as_ggplot(text_grob(paste("Loud"), size = 24))
+quiet <- as_ggplot(text_grob(paste("Quiet"), size = 24))
+#loud_avg <- as_ggplot(text_grob(paste("Avg: -19.13"), size = 12))
+#quiet_avg <- as_ggplot(text_grob(paste("Avg: -17.44"), size = 12))
+
+loud_data_bot <- vibration_map %>% 
+  filter(Container == "Loud",
+         High_Freq == "1000",
+         Side == "Bottom")
+mean(loud_data_bot$Leq)
+
+quiet_data_bot <- vibration_map %>% 
+  filter(Container == "Quiet",
+         High_Freq == "1000",
+         Side == "Bottom")
+mean(quiet_data_bot$Leq)
+
+loud_avg <- as_ggplot(text_grob(paste("Bottom Avg\n-51.73"), size = 12))
+quiet_avg <- as_ggplot(text_grob(paste("Bottom Avg\n-62.95"), size = 12))
+
+tunnel <- ggarrange(ttop, tb, tbot, ta, nrow = 4, common.legend = TRUE)
+
+side1row1 <- ggarrange(loud, cl, blankPlot, nrow = 1)
+side2row1 <- ggarrange(blankPlot, cq, quiet, nrow = 1)
+side1row2 <- ggarrange(bl, botl, dl, nrow = 1)
+side2row2 <- ggarrange(dq, botq, bq, nrow = 1)
+side1row3 <- ggarrange(loud_avg, al, blankPlot, nrow = 1)
+side2row3 <- ggarrange(blankPlot, aq, quiet_avg, nrow = 1)
+
+side1 <- ggarrange(side1row1, side1row2, side1row3, ncol = 1)
+side2 <- ggarrange(side2row1, side2row2, side2row3, ncol = 1)
+
+all <- ggarrange(side1, tunnel, side2, nrow = 1, widths = c(0.43, 0.14, 0.43))
+
+saveRDS(all, "/Users/bjpessman/Documents/phd_research_code/Vibratory_Noise/wrangled_data/vibration_map.rds")
+```

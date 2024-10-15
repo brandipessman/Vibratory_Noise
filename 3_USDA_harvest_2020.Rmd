@@ -1,0 +1,106 @@
+---
+title: "2020 Agricultural Harvest Trends"
+author: "Brandi Pessman"
+date: "2024-10-02"
+output: html_document
+---
+
+Presented here are the USDA data on the percent of field crops harvested at the end of each week for the state of Nebraska in 2020. During the study period, we catch the tail end of the summer crop harvest (oats and wheat). Fall harvest increases throughout September and the first half of October. Dry bean harvest peaks at the end of September, and corn harvest peaks at the beginning of October. Harvest of the remaining crops (sorghum and soybeans) peaks in mid October. 
+
+# Load Libraries
+
+```{r libraries}
+library(tidyverse) # for wrangling
+library(lubridate) # for handling dates
+```
+
+# Import and Wrangling
+
+```{r import harvest data}
+# imports the data frame and adds Crop - a column with either Summer or Fall depending on the time of year the harvest occurs; we narrowed the results to only include the dates of the study
+harvest <- read.csv("data/USDA_harvest_data.csv", header = TRUE) %>% 
+  mutate(Week.Ending = mdy(Week.Ending),
+         Crop = ifelse(Commodity == "WHEAT" | Commodity == "OATS", "Summer", "Fall")) %>% 
+  filter(Week.Ending > "2020-08-01",
+         Week.Ending < "2020-10-26") %>% 
+  dplyr::select(Week.Ending, Commodity, Value, Weekly.Value, Crop) %>% 
+  mutate(Commodity = fct_relevel(factor(Commodity), "OATS", "WHEAT", "BEANS", "CORN", "SORGHUM", "SOYBEANS"))
+
+# We  calculate the average weekly harvest rate across the commodities and combine 
+combined <- rbind(harvest, harvest %>% 
+  group_by(Week.Ending) %>% 
+  summarize(Weekly.Value = mean(Weekly.Value),
+            Value = mean(Value)) %>% 
+  mutate(Commodity = "MEAN", Crop = "Mean"))
+
+# let's look at major crops grown in Lancaster County, Nebraska
+harvest_Lan <- harvest %>% 
+  ungroup() %>% 
+  filter(Commodity == "SOYBEANS" | Commodity == "CORN")
+
+avg_Lan <- harvest_Lan %>% 
+  group_by(Week.Ending) %>% 
+  summarize(Weekly.Value = mean(Weekly.Value),
+            Value = mean(Value)) %>% 
+  mutate(Commodity = "MEAN", Crop = "Mean") 
+
+combined_Lan <- rbind(harvest_Lan, avg_Lan)
+saveRDS(combined_Lan, "wrangled_data/combined_Lan.rds")
+```
+
+```{r harvest of all crops in Lancaster County}
+ggplot() +
+  geom_line(aes(x = Week.Ending, y = Weekly.Value, group = Commodity, color = Commodity, linetype = Commodity), data = combined, linewidth = 1, alpha = 1) +
+  scale_color_manual(values = c("#E6AB02", "#E6AB02", "#A6761D", "#A6761D", "#A6761D", "#A6761D", "black"), 
+                     labels = c("Oats, Summer", "Wheat, Summer", "Dry Beans, Fall", "Corn, Fall","Sorghum, Fall", "Soybeans, Fall", "Mean")) +
+  scale_linetype_manual(values = c("solid", "dashed", "solid", "dashed", "dotted", "twodash", "solid"), 
+                        labels = c("Oats, Summer", "Wheat, Summer", "Dry Beans, Fall", "Corn, Fall", "Sorghum, Fall", "Soybeans, Fall", "Mean")) +
+  xlab("Date (Weeks)") +
+  ylab("Percent Harvested per Week") +
+  theme_classic() +
+  theme(legend.key.size = unit(1.5, "cm"),
+        text = element_text(size = 12, color = "black", family = "sans"),
+        axis.title = element_text(size = 12, color = "black", family = "sans"),
+        axis.text = element_text(size = 12, color = "black", family = "sans"),
+        legend.text = element_text(size = 10, color = "black", family = "sans"))
+```
+
+```{r harvest of major crops in Lancaster County}
+ggplot() +
+  geom_line(aes(x = Week.Ending, y = Weekly.Value, group = Commodity, color = Commodity), data = combined_Lan, linewidth = 1, alpha = 1) +
+  geom_area(aes(x = Week.Ending, y = Weekly.Value, group = Commodity, color = Commodity, fill = Commodity), data = combined_Lan, alpha = 0.5, position = 'identity') +
+  scale_color_manual("Crop", values = c("#e6ab02", "#66a61e", "black"), 
+                     labels = c("Corn", "Soybeans", "Mean")) +
+  scale_fill_manual("Crop", values = c("#e6ab02", "#66a61e", "black"), 
+                     labels = c("Corn", "Soybeans", "Mean")) +
+  scale_x_date(date_labels = "%b %d", limits = as.Date(c("2020-08-02", "2020-10-25")), breaks = as.Date(c("2020-08-03", "2020-08-31", "2020-09-22", "2020-10-12", ""))) + #2020-10-23
+  scale_y_continuous(limits = c(0, 30), breaks = c(0, 5, 10, 15, 20, 25, 30)) +
+  xlab("Date (weeks)") +
+  ylab("% harvested per week") +
+  theme_classic() +
+  theme(legend.key.size = unit(0.5, "cm"),
+        text = element_text(size = 10), 
+        axis.title = element_text(size = 10, color = "black", family = "sans"),
+        axis.text = element_text(size = 10, color = "black", family = "sans"),
+        legend.text = element_text(size = 8, color = "black", family = "sans"),
+        legend.title = element_text(size = 8, color = "black", family = "sans"),
+        legend.position = c(0.21, 0.7),
+        # legend.background = element_rect(fill="grey95",
+        #                           linewidth=0.5, linetype="solid", 
+        #                           colour ="black"),
+         #panel.grid.major.x = element_line(colour = "black", linetype = "dashed", size = 0.1)
+        ) +
+  annotate(geom = "text", x = as.Date("2020-08-16"), y = 30, label = "Visit 1", color = "black", size = 3) +
+  annotate(geom = "text", x = as.Date("2020-09-11"), y = 30, label = "Visit 2", color = "black", size = 3) +
+  annotate(geom = "text", x = as.Date("2020-10-02"), y = 30, label = "Visit 3", color = "black", size = 3) +
+  annotate(geom = "text", x = as.Date("2020-10-18"), y = 30, label = "Visit 4", color = "black", size = 3) +
+  annotate(geom = "text", x = as.Date("2020-09-11"), y = 28, label = "15%", color = "#e6ab02", size = 2) +
+  annotate(geom = "text", x = as.Date("2020-10-01"), y = 28, label = "34%", color = "#e6ab02", size = 2) +
+  annotate(geom = "text", x = as.Date("2020-10-17"), y = 28, label = "51%", color = "#e6ab02", size = 2) +
+  annotate(geom = "text", x = as.Date("2020-09-11"), y = 27, label = "16%", color = "#66a61e", size = 2) +
+  annotate(geom = "text", x = as.Date("2020-10-01"), y = 27, label = "70%", color = "#66a61e", size = 2) +
+  annotate(geom = "text", x = as.Date("2020-10-17"), y = 27, label = "14%", color = "#66a61e", size = 2) +
+  annotate(geom = "text", x = as.Date("2020-09-11"), y = 26, label = "15%", color = "black", size = 2) +
+  annotate(geom = "text", x = as.Date("2020-10-01"), y = 26, label = "55%", color = "black", size = 2) +
+  annotate(geom = "text", x = as.Date("2020-10-17"), y = 26, label = "30%", color = "black", size = 2)
+```

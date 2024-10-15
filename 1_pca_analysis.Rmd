@@ -1,0 +1,85 @@
+---
+title: "Noise PCA Analysis"
+author: "Brandi Pessman"
+date: "2024-10-01"
+output: html_document
+---
+
+# Load Libraries
+
+```{r libraries}
+library(tidyverse) # for wrangling data
+library(FactoMineR) # to run PCA
+library(factoextra) # to make PCA plot
+library(corrplot) # build pca correlation plot
+```
+
+# Import Data
+
+```{r import}
+# this one includes wilderness park data in order to get an estimate of noise disturbance there
+pca_wp <- read.table("data/pca_noise.txt", header = TRUE)
+colnames(pca_wp) <- c('Impervious','Road Distance','Traffic Distance', 'Traffic', 'Road Length', 'Traffic Impact', 'Category')
+pca_wp <- pca_wp %>% 
+  mutate(Category = fct_relevel(factor(Category), "Urban", "Rural", "Forest"))
+pca_wp <- pca_wp[, c(1, 3, 4, 5, 2, 6, 7)]
+site_pca_wp <- PCA(pca_wp[,1:4], graph = FALSE)
+
+# this one is without wilderness park data
+pca <- read.table("data/pca_noise.txt", header = TRUE)
+colnames(pca) <- c('Impervious','Road Distance','Traffic Distance', 'Traffic', 'Road Length', 'Traffic Impact', 'Category')
+pca <- pca %>% 
+  filter(! Category == "Forest") %>% 
+  mutate(Category = fct_relevel(factor(Category), "Urban", "Rural"))
+pca <- pca[, c(1, 3, 4, 5, 2, 6, 7)]
+site_pca <- PCA(pca[,1:4], graph = FALSE)
+
+saveRDS(pca, "wrangled_data/pca.rds") 
+```
+
+# Correlation Plot 
+
+```{r correlation_plot, echo = FALSE, message = FALSE, warning = FALSE}
+# With Wilderness Park
+## contribution of each axis
+fviz_eig(site_pca_wp, addlabels = TRUE)
+## broken down by contribution of each variable to each axis
+var_wp <- get_pca_var(site_pca_wp)
+colnames(var_wp$cos2) <- c("PC1", "PC2", "PC3", "PC4")
+rownames(var_wp$cos2) <- c("Imperv.\nCover", "Traffic \nDistance", "Traffic", "Road \nLength")
+corrplot(var_wp$cos2, is.corr=FALSE, tl.col = "black", addCoef.col = 1, number.cex = 0.5, tl.cex = 0.5, cl.cex = 0.5)
+
+# Without Wilderness Park
+## contribution of each axis
+fviz_eig(site_pca, addlabels = TRUE)
+## broken down by contribution of each variable to each axis
+var <- get_pca_var(site_pca)
+colnames(var$cos2) <- c("PC1", "PC2", "PC3", "PC4")
+rownames(var$cos2) <- c("Imperv.\nCover", "Traffic \nDistance", "Traffic", "Road \nLength")
+corrplot(var$cos2, is.corr=FALSE, tl.col = "black", addCoef.col = 1, number.cex = 0.5, tl.cex = 0.5, cl.cex = 0.5)
+```
+
+# PCA Analysis - Get Dimensions
+
+```{r get dimensions}
+# With Wilderness Park
+wp_dims <- data.frame(site_pca_wp$ind$coord)
+
+# Without Wilderness Park
+dims <- data.frame(site_pca$ind$coord)
+## move sites from rownames to a column
+pca_fixed <- pca 
+pca_fixed$Site <- rownames(pca)
+rownames(pca_fixed) <- NULL
+## move sites from rownames to a column
+dims$Site <- rownames(dims)
+rownames(dims) <- NULL
+pca_results <- full_join(pca_fixed, dims, by = "Site")
+
+## Save results
+saveRDS(pca_results, file = "data/pca_results.rds")
+```
+
+Dim.1 of W is -1.18889985. 
+
+

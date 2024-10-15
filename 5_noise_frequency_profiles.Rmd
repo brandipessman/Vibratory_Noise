@@ -1,0 +1,95 @@
+---
+title: "Frequency Profiles of Recorded Field Noise"
+author: "Brandi Pessman"
+date: "2024-10-02"
+output: html_document
+---
+
+# Load Libraries
+
+```{r libraries}
+library(tidyverse)
+```
+
+# Import
+
+```{r import}
+field_freq_site_manmade <- readRDS("wrangled_data/field_freq_site_manmade.rds")
+field_freq <- readRDS("wrangled_data/field_freq.rds")
+```
+
+# Plots
+
+```{r plot overall}
+field_freq %>% 
+  ggplot() +
+  geom_line(aes(x = Low_Freq, y = mean_power, linetype = Site, color = Locations)) +
+  geom_ribbon(aes(x = Low_Freq, ymin = mean_power - se_power, ymax = mean_power + se_power, group = Site, fill = Locations), alpha = 0.5) +
+  scale_color_manual("", values = c("#1b9e77", "#d95f02"),
+                     labels = c("Rural", "Urban")) +
+  scale_fill_manual("", values = c("#1b9e77", "#d95f02"),
+                     labels = c("Rural", "Urban")) +
+  scale_linetype_manual(values = c("solid", "longdash", "dotted", "solid", "longdash", "dotted"),
+                        labels = c("8B - loudest urban", "5C", "4A", "5A", "6C", "6B - quietest rural")) +
+  xlab("Frequency (5.86 Hz Bins)") +
+  ylab("Relative Amplitude \n(Inband Power, dB re FS)") +
+  theme_classic() +
+  theme(axis.text = element_text(family = "sans", size = 14, color = "black"),
+        axis.title = element_text(family = "sans", size = 14, color = "black"),
+        legend.text = element_text(family = "sans", size = 14, color = "black"),
+        legend.title = element_text(family = "sans", size = 14, color = "black"),
+        strip.text = element_text(family = "sans", size = 14, color = "black"),
+        legend.position = "top") +
+  guides(linetype = guide_legend(nrow = 6),
+         color = guide_legend(nrow = 2)) +
+  facet_wrap(~Type) #700 x 500
+```
+
+```{r plot by site}
+field_freq %>% 
+  ggplot() +
+  geom_line(aes(x = Low_Freq, y = mean_power, linetype = Site, color = Type), linewidth = 1) +
+  geom_ribbon(aes(x = Low_Freq, ymin = mean_power - se_power, ymax = mean_power + se_power, alpha = Site, fill = Type)) +
+  scale_alpha_discrete(range = c(0.5, 0.5)) +
+  scale_color_manual("", values = c("grey30", "#66A61E")) +
+  scale_fill_manual("", values = c("grey30", "#66A61E")) +
+  scale_linetype_manual(values = c("solid", "solid", "solid", "solid", "solid", "solid")) +
+  xlab("Frequency (5.86 Hz Bins)") +
+  ylab("Relative Amplitude (Inband Power, dB re FS)") +
+  theme_classic() +
+  theme(axis.text = element_text(family = "sans", size = 14, color = "black"),
+        axis.title = element_text(family = "sans", size = 14, color = "black"),
+        legend.text = element_text(family = "sans", size = 14, color = "black"),
+        legend.title = element_text(family = "sans", size = 14, color = "black"),
+        strip.text = element_text(family = "sans", size = 14, color = "black"),
+        legend.position = "top") +
+  guides(linetype = "none",
+         color = guide_legend(nrow = 1),
+         alpha = "none") +
+  facet_wrap(~Site)
+```
+
+```{r plot by site and manmade type}
+field_freq_site_manmade %>% 
+  ggplot() +
+  #geom_line(aes(x = Low_Freq, y = mean_power, linetype = Recorder, color = Substrate), linewidth = 1) +
+  geom_line(aes(x = Low_Freq, y = mean_power, color = Substrate), linetype = "solid") +
+  #geom_ribbon(aes(x = Low_Freq, ymin = mean_power - se_power, ymax = mean_power + se_power, alpha = Recorder, fill = Substrate)) +
+  scale_alpha_discrete(range = c(0.5, 0.5)) +
+  #scale_color_manual("", values = c("grey30", "#66A61E")) +
+  #scale_fill_manual("", values = c("grey30", "#66A61E")) +
+  #scale_linetype_manual(values = c("solid", "dashed", "dashed", "solid", "solid", "dashed", "solid", "dashed")) +
+  xlab("Frequency (5.86 Hz Bins)") +
+  ylab("Relative Amplitude (Inband Power, dB re FS)") +
+  theme_classic() +
+  theme(axis.text = element_text(family = "sans", size = 14, color = "black"),
+        axis.title = element_text(family = "sans", size = 14, color = "black"),
+        legend.text = element_text(family = "sans", size = 14, color = "black"),
+        legend.title = element_text(family = "sans", size = 14, color = "black"),
+        strip.text = element_text(family = "sans", size = 14, color = "black"),
+        legend.position = "top") +
+  guides(linetype = "none",
+         color = guide_legend(nrow = 1),
+         alpha = "none") +
+  facet_wrap(~Site) # 1000 x 500
+```

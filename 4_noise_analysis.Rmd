@@ -1,0 +1,670 @@
+---
+title: "Noise Analysis"
+author: "Brandi Pessman"
+date: "2024-10-01"
+output: html_document
+---
+
+# Load Libraries
+
+```{r libraries}
+library(tidyverse) # for wrangling and making graphs
+library(lme4) # for mixed models
+library(lmerTest) # get p-values for lmer for spatial
+library(robustlmm) # to run rlmer
+library(ggrepel) # for repelling labels on the graph
+library(effects) # graphs of rlmer results
+library(emmeans) # for pairwise comparisons
+```
+
+# Import Data
+
+```{r import}
+source("functions/r_squared.R")
+source("functions/residual_plots.R")
+BootFunc <- function(mm) {
+    predict(mm, newdata = predictions, re.form = ~0, type = "response")
+}
+
+dayavgl <- readRDS("wrangled_data/dayavgl.rds")
+houravgcatl <- readRDS("wrangled_data/houravgcatl.rds")
+
+# only for season analysis; only 2020 data
+dayavgl_2020 <- dayavgl %>% 
+  filter(Date < "2021-01-01") 
+
+
+# adds week end mean harvest percent for each week in the study period
+USDA_harvest <- dayavgl_2020 %>% 
+  filter(Category == "Rural") %>% 
+  mutate(mean_harvest = ifelse(Date < "2020-08-31", 0, 
+                        ifelse(Date < "2020-09-06", 1,
+                        ifelse(Date < "2020-09-13", 2.5,
+                        ifelse(Date < "2020-09-20", 6.5,
+                        ifelse(Date < "2020-09-27", 11.5,
+                        ifelse(Date < "2020-10-04", 16.5,
+                        ifelse(Date < "2020-10-11", 20,
+                        ifelse(Date < "2020-10-18", 17, 
+                        ifelse(Date < "2020-10-25", 11.5))))))))))
+```
+
+# Spatial Analysis
+
+## Raw Plots
+
+```{r spatial raw dim 1}
+dayavgl %>% 
+  ggplot(aes(x = Dim.1, y = mean_leq, color = Substrate, fill = Substrate)) +
+    geom_smooth(method = "loess") +
+    ggtitle("Raw Data") +
+    xlab("Principal Component 1 (70.9%)") +
+    ylab("Daily Average Leq (20-1000 Hz)") +
+    scale_color_manual("Substrate", values = c("grey30", "#66A61E"),
+                          labels = c("Manmade", "Plant")) +
+    scale_fill_manual("Substrate", values = c("grey30", "#66A61E"),
+                         labels = c("Manmade", "Plant")) +
+    scale_y_continuous(limits = c(-75, -50), breaks = c(-75, -70, -65, -60, -55, -50)) +
+    theme_classic() +
+    facet_wrap(~Category, scales = "free")
+```
+
+```{r spatial raw dim 2}
+dayavgl %>% 
+  ggplot(aes(x = Dim.2, y = mean_leq, color = Substrate, fill = Substrate)) +
+    geom_smooth(method = "loess") +
+    ggtitle("Raw Data") +
+    xlab("Principal Component 2 (18.3%)") +
+    ylab("Daily Average Leq (20-1000 Hz)") +
+    scale_color_manual("Substrate", values = c("grey30", "#66A61E"),
+                          labels = c("Manmade", "Plant")) +
+    scale_fill_manual("Substrate", values = c("grey30", "#66A61E"),
+                         labels = c("Manmade", "Plant")) +
+    scale_y_continuous(limits = c(-75, -49), breaks = c(-75, -70, -65, -60, -55, -50)) +
+    theme_classic() +
+    facet_wrap(~Category, scales = "free")
+```
+
+## Stats
+
+### By category
+
+```{r spatial overall category lmer}
+#lmer - use this (similiar results)
+dayavgl.lmer.cat <- lmer(mean_leq ~ Category + (1|Site), data = dayavgl)
+summary(dayavgl.lmer.cat)
+r_squared(dayavgl.lmer.cat)
+
+#robust lmer
+dayavgl.rlmer.cat <- rlmer(mean_leq ~ Category + (1|Site), data = dayavgl)
+summary(dayavgl.rlmer.cat)
+coefs.robust.cat <- data.frame(coef(summary(dayavgl.rlmer.cat)))
+coefs.robust.cat$P <- round(2*pt(abs(coefs.robust.cat[,3]), summary(dayavgl.lmer.cat)$devcomp$dims[4], lower=FALSE), 10)
+coefs.robust.cat
+r_squared(dayavgl.rlmer.cat)
+```
+
+### Dim 1
+
+```{r spatial overall dim 1 lmer}
+# Let's look for overall effects of PC1 and substrate
+#lmer - use this (similiar results)
+dayavgl.lmer <- lmer(mean_leq ~ Dim.1 * Substrate + (1|Site), data = dayavgl)
+summary(dayavgl.lmer)
+r_squared(dayavgl.lmer)
+
+#robust lmer
+dayavgl.rlmer <- rlmer(mean_leq ~ Dim.1 * Substrate + (1|Site), data = dayavgl)
+coefs.robust <- data.frame(coef(summary(dayavgl.rlmer)))
+coefs.robust$P <- round(2*pt(abs(coefs.robust[,3]), summary(dayavgl.rlmer)$devcomp$dims[4], lower=FALSE), 10)
+coefs.robust
+r_squared(dayavgl.rlmer)
+```
+
+```{r spatial rural dim 1 robust}
+#lmer
+dayavgl_rural <- dayavgl %>% 
+  filter(Category == "Rural")
+dayavgl.lmer.r <- lmer(mean_leq ~ Dim.1 * Substrate + (1|Site), data = dayavgl_rural)
+summary(dayavgl.lmer.r)
+r_squared(dayavgl.lmer.r)
+
+#robust lmer - use this one (different results)
+dayavgl.rlmer.r <- rlmer(mean_leq ~ Dim.1 * Substrate + (1|Site), data = dayavgl_rural)
+coefs.robust <- data.frame(coef(summary(dayavgl.rlmer.r)))
+coefs.robust$P <- round(2*pt(abs(coefs.robust[,3]), summary(dayavgl.rlmer.r)$devcomp$dims[4], lower=FALSE), 10)
+coefs.robust
+r_squared(dayavgl.rlmer.r)
+```
+
+```{r spatial urban dim 1 lmer}
+#lmer - use this one (similar results)
+dayavgl_urban <- dayavgl %>% 
+  filter(Category == "Urban")
+dayavgl.lmer.u <- lmer(mean_leq ~ Dim.1 * Substrate + (1|Site), data = dayavgl_urban)
+summary(dayavgl.lmer.u)
+r_squared(dayavgl.lmer.u)
+
+#robust lmer
+dayavgl.rlmer.u <- rlmer(mean_leq ~ Dim.1 * Substrate + (1|Site), data = dayavgl_urban)
+coefs.robust <- data.frame(coef(summary(dayavgl.rlmer.u)))
+coefs.robust$P <- round(2*pt(abs(coefs.robust[,3]), summary(dayavgl.rlmer.u)$devcomp$dims[4], lower=FALSE), 10)
+coefs.robust
+r_squared(dayavgl.rlmer.u)
+```
+
+### Dim 2
+
+```{r spatial overall dim 2 lmer}
+#lmer - use this one (similar results)
+dayavgl.lmer2 <- lmer(mean_leq ~ Dim.2 * Substrate * Category + (1|Site), data = dayavgl)
+drop1(dayavgl.lmer2, test = "Chisq")
+dayavgl.lmer2_2 <- update(dayavgl.lmer2, .~. -Dim.2:Substrate:Category)
+drop1(dayavgl.lmer2_2, test = "Chisq")
+dayavgl.lmer2_3 <- update(dayavgl.lmer2_2, .~. -Dim.2:Substrate)
+drop1(dayavgl.lmer2_3, test = "Chisq")
+dayavgl.lmer2_4 <- update(dayavgl.lmer2_3, .~. -Substrate:Category)
+drop1(dayavgl.lmer2_4, test = "Chisq")
+summary(dayavgl.lmer2_4)
+r_squared(dayavgl.lmer2_4)
+
+#robust
+dayavgl.rlmer2 <- rlmer(mean_leq ~ Dim.2 + Substrate + Category + Dim.2:Category + (1|Site), data = dayavgl)
+coefs.robust <- data.frame(coef(summary(dayavgl.rlmer2)))
+coefs.robust$P <- round(2*pt(abs(coefs.robust[,3]), summary(dayavgl.rlmer2)$devcomp$dims[4], lower=FALSE), 10)
+coefs.robust
+r_squared(dayavgl.rlmer2)
+```
+
+## Assumptions 
+
+```{r spatial assumptions}
+residual_plots(dayavgl.lmer, dayavgl)
+residual_plots(dayavgl.lmer.r, dayavgl_rural)
+residual_plots(dayavgl.lmer.u, dayavgl_urban)
+```
+
+## Prediction Graphs
+
+### Dim 1
+
+```{r spatial graph overall dim 1}
+predictions <- expand.grid(Dim.1 = seq(-3.5, 2.5, 0.05),
+                           Substrate = levels(factor(dayavgl$Substrate)))
+predictions$response <- predict(dayavgl.lmer, newdata = predictions, se.fit = TRUE, re.form = NA, type = "response")
+
+#bigBoot_spatial <- bootMer(dayavgl.lmer, BootFunc, nsim = 1000)
+#saveRDS(bigBoot_spatial, file = "bootstrapping/bigBoot_spatial.Rds")
+bigBoot_spatial <- readRDS("bootstrapping/bigBoot_spatial.Rds")
+predSE <- t(apply(bigBoot_spatial$t, MARGIN = 2, FUN = sd))
+predictions$SE <- predSE[1, ]
+
+spatial_dayavgl <- dayavgl %>% 
+  ungroup() %>% 
+  dplyr::select(Site, Category, Substrate, Dim.1, Dim.2, mean_leq) %>% 
+  group_by(Site, Substrate, Category, Dim.1, Dim.2) %>% 
+  summarize(mean = mean(mean_leq),
+            sd = sd(mean_leq))
+
+highlights <- dayavgl %>% 
+  filter(mean_leq == max(dayavgl$mean_leq) | mean_leq == min(dayavgl$mean_leq)) %>% 
+  mutate(mean_leq = round(mean_leq, 2))
+
+ggplot() +
+  annotate("rect", xmin = -3.75, xmax = -1.5, ymin = -73, ymax = -57,
+           alpha = 0.25, color = "#1B9E77", fill = NA, linewidth = 1) +
+  annotate("rect", xmin = -0.5, xmax = 2.5, ymin = -69, ymax = -50,
+           alpha = 0.25, color = "#D95F02", fill = NA, linewidth = 1) +
+  geom_point(aes(x = Dim.1, y = mean, color = Substrate), data = spatial_dayavgl, position = position_dodge(width = 0.25), size = 1) +
+  geom_errorbar(aes(x = Dim.1, ymax = mean + sd, ymin = mean - sd, color = Substrate), width = 0, data = spatial_dayavgl, position = position_dodge(width = 0.25), linewidth = 0.4) +
+  geom_point(aes(x = Dim.1, y = mean_leq), color = "red", data = highlights) +
+  geom_line(aes(x = Dim.1, y = response, color = Substrate), data = predictions) +
+  geom_ribbon(aes(x = Dim.1, ymax = response + SE, ymin = response - SE, fill = Substrate, color = Substrate), data = predictions, alpha = 0.5) +
+  geom_label_repel(aes(x = Dim.1, y = mean_leq, label = mean_leq), color = "red", hjust = "right", data = highlights, size = 2) +
+  xlab("Potential traffic impact \n(PC1, explains 70.9%)") +
+  ylab("Daily average relative amplitude \n(Leq in dB re FS, 20-1000 Hz)") +
+  scale_color_manual("Substrate", values = c("grey30", "#66A61E"),
+                     labels = c("Manmade", "Plant")) +
+  scale_fill_manual("Substrate", values = c("grey30", "#66A61E"),
+                     labels = c("Manmade", "Plant")) +
+  scale_y_continuous(limits = c(-75, -50), breaks = c(-75, -70, -65, -60, -55, -50)) +
+  scale_x_continuous(limits = c(-3.75, 2.65), breaks = c(-3, -2, -1, 0, 1, 2)) +
+  theme_classic() +
+  theme(text = element_text(size = 10, color = "black", family = "sans"),
+        axis.text = element_text(size = 10, color = "black", family = "sans"),
+        axis.title = element_text(size = 10, color = "black", family = "sans"),
+        legend.text = element_text(size = 8, color = "black", family = "sans"),
+        legend.position = "top",
+        legend.title = element_text(size = 8),
+        panel.grid.major.y = element_line(colour = "black", linetype = "dashed", linewidth = 0.1)
+        )
+```
+
+```{r spatial graph urban dim 1}
+spatial_dayavgl_u <- spatial_dayavgl %>% 
+  filter(Category == "Urban")
+
+predictions <- expand.grid(Dim.1 = seq(0, 2.2, 0.05),
+                           Substrate = 
+                             levels(factor(dayavgl_urban$Substrate)))
+predictions$response <- predict(dayavgl.lmer.u, 
+                                newdata = predictions, se.fit = TRUE, 
+                                re.form = NA, type = "response")
+
+#bigBoot_spatial_urban <- bootMer(dayavgl.lmer.u, BootFunc, nsim = 1000)
+#saveRDS(bigBoot_spatial_urban, file = "bootstrapping/bigBoot_spatial_urban.Rds")
+bigBoot_spatial_urban <- readRDS("bootstrapping/bigBoot_spatial_urban.Rds")
+predSE <- t(apply(bigBoot_spatial_urban$t, MARGIN = 2, FUN = sd))
+predictions$SE <- predSE[1, ]
+
+
+ggplot() +
+  geom_point(aes(x = Dim.1, y = mean, color = Substrate), data = spatial_dayavgl_u, position = position_dodge(width = 0.25), size = 1) +
+  geom_errorbar(aes(x = Dim.1, ymax = mean + sd, ymin = mean - sd, color = Substrate), width = 0, data = spatial_dayavgl_u, position = position_dodge(width = 0.25), linewidth = 0.4) +
+  geom_line(aes(x = Dim.1, y = response, color = Substrate), data = predictions) +
+  geom_ribbon(aes(x = Dim.1, ymax = response + SE, ymin = response - SE, fill = Substrate, color = Substrate), data = predictions, alpha = 0.5) +
+  xlab("Potential traffic impact \n(PC1, explains 70.9%)") +
+  #ylab("Amplitude (dB)\nQuieter <-------------------> Louder") +
+  ylab("Daily average relative amplitude \n(Leq in dB re FS, 20-1000 Hz)") +
+  scale_color_manual("Substrate", values = c("grey30", "#66A61E"),
+                     labels = c("Manmade", "Plant")) +
+  scale_fill_manual("Substrate", values = c("grey30", "#66A61E"),
+                     labels = c("Manmade", "Plant")) +
+  scale_y_continuous(limits = c(-75, -49), breaks = c(-75, -70, -65, -60, -55, -50)) +
+  scale_x_continuous(limits = c(0, 2.2), breaks = c(0, 0.5, 1, 1.5, 2)) +
+  theme_classic() +
+  theme(text = element_text(size = 10, color = "black", family = "sans"),
+        axis.text = element_text(size = 10, color = "black", family = "sans"),
+        axis.title = element_text(size = 10, color = "black", family = "sans"),
+        legend.text = element_text(size = 8, color = "black", family = "sans"),
+        legend.position = "none",
+        legend.title = element_text(size = 8),
+        panel.grid.major.y = element_line(colour = "black", linetype = "dashed", linewidth = 0.1),
+        panel.border = element_rect(color = "#D95F02", fill = NA, linewidth = 2))
+```
+
+```{r spatial graph rural dim 1 robust}
+spatial_dayavgl_r <- spatial_dayavgl %>% 
+  filter(Category == "Rural")
+
+predictions <- as.data.frame(effect("Dim.1*Substrate", dayavgl.rlmer.r))
+size = 10
+
+ggplot() +
+  geom_point(aes(x = Dim.1, y = mean, color = Substrate), data = spatial_dayavgl_r, position = position_dodge(width = 0.25), size = 1) +
+  geom_errorbar(aes(x = Dim.1, ymax = mean + sd, ymin = mean - sd, color = Substrate), width = 0, data = spatial_dayavgl_r, position = position_dodge(width = 0.25), linewidth = 0.4) +
+  geom_line(aes(x = Dim.1, y = fit, color = Substrate), data = predictions) +
+  geom_ribbon(aes(x = Dim.1, ymax = fit + se, ymin = fit - se, fill = Substrate, color = Substrate), data = predictions, alpha = 0.5) +
+  xlab("Potential traffic impact \n(PC1, explains 70.9%)") +
+  ylab("Daily average relative amplitude \n(Leq in dB re FS, 20-1000 Hz)") +
+  #ylab("Amplitude (dB)\nQuieter <-------------------> Louder") +
+  scale_color_manual("Substrate", values = c("grey30", "#66A61E"),
+                     labels = c("Manmade", "Plant")) +
+  scale_fill_manual("Substrate", values = c("grey30", "#66A61E"),
+                     labels = c("Manmade", "Plant")) +
+  scale_y_continuous(limits = c(-75, -50), breaks = c(-75, -70, -65, -60, -55, -50)) +
+  scale_x_continuous(limits = c(-3.5, -2), breaks = c(-3.5, -3, -2.5, -2)) +
+  theme_classic() +
+  theme(text = element_text(size = size, color = "black", family = "sans"),
+        axis.text = element_text(size = size, color = "black", family = "sans"),
+        axis.title = element_text(size = size, color = "black", family = "sans"),
+        legend.text = element_text(size = size, color = "black", family = "sans"),
+        legend.position = "none",
+        legend.title = element_text(size = size),
+        panel.grid.major.y = element_line(colour = "black", linetype = "dashed", linewidth = 0.1),
+        panel.border = element_rect(color = "#1B9E77", fill = NA, linewidth = 2))
+```
+
+### Dim 2
+
+```{r spatial graph overall dim 2}
+predictions <- expand.grid(Dim.2 = seq(-2, 2, 0.05),
+                           Substrate = levels(factor(dayavgl$Substrate)),
+                           Category = levels(factor(dayavgl$Category)))
+predictions$response <- predict(dayavgl.lmer2, newdata = predictions, se.fit = TRUE, re.form = NA, type = "response")
+
+#bigBoot_spatial2 <- bootMer(dayavgl.lmer2, BootFunc, nsim = 1000)
+#saveRDS(bigBoot_spatial2, file = "bootstrapping/bigBoot_spatial2.Rds")
+bigBoot_spatial2 <- readRDS("bootstrapping/bigBoot_spatial2.Rds")
+predSE <- t(apply(bigBoot_spatial2$t, MARGIN = 2, FUN = sd))
+predictions$SE <- predSE[1, ]
+
+ggplot() +
+  geom_point(aes(x = Dim.2, y = mean, color = Substrate), data = spatial_dayavgl, position = position_dodge(width = 0.25), size = 1) +
+  geom_errorbar(aes(x = Dim.2, ymax = mean + sd, ymin = mean - sd, color = Substrate), width = 0, data = spatial_dayavgl, position = position_dodge(width = 0.25), linewidth = 0.4) +
+  geom_point(aes(x = Dim.2, y = mean_leq), color = "red", data = highlights) +
+  geom_line(aes(x = Dim.2, y = response, color = Substrate), data = predictions) +
+  geom_ribbon(aes(x = Dim.2, ymax = response + SE, ymin = response - SE, fill = Substrate, color = Substrate), data = predictions, alpha = 0.5) +
+  geom_label_repel(aes(x = Dim.2, y = mean_leq, label = mean_leq), color = "red", hjust = "right", data = highlights, size = 2) +
+  xlab("Potential traffic impact (PC2, explains 18.3%)") +
+  ylab("Daily average relative amplitude \n(Leq in dB re FS, 20-1000 Hz)") +
+  scale_color_manual("Substrate", values = c("grey30", "#66A61E"),
+                     labels = c("Manmade", "Plant")) +
+  scale_fill_manual("Substrate", values = c("grey30", "#66A61E"),
+                     labels = c("Manmade", "Plant")) +
+  scale_y_continuous(limits = c(-75, -50), breaks = c(-75, -70, -65, -60, -55, -50)) +
+  scale_x_continuous(limits = c(-2, 2), breaks = c(-2, -1, 0, 1, 2)) +
+  theme_classic() +
+  theme(text = element_text(size = 10, color = "black", family = "sans"),
+        axis.text = element_text(size = 10, color = "black", family = "sans"),
+        axis.title = element_text(size = 10, color = "black", family = "sans"),
+        legend.text = element_text(size = 8, color = "black", family = "sans"),
+        legend.position = "top",
+        legend.title = element_text(size = 8),
+        panel.grid.major.y = element_line(colour = "black", linetype = "dashed", linewidth = 0.1)) +
+  facet_wrap(~Category)
+```
+
+# Season Analysis
+
+## Raw Plots
+
+```{r seasonal raw}
+dayavgl_2020 %>% 
+  mutate(Visit = fct_relevel(Visit, "1", "2", "3", "4")) %>% 
+ggplot(aes(x = Visit, y = mean_leq, color = Category)) +
+  geom_boxplot() +
+  scale_y_continuous(limits = c(-75, -50), breaks = c(-75, -70, -65, -60, -55, -50)) +
+  scale_color_manual("Category", values = c("#1B9E77", "#D95F02"),
+                     labels = c("Rural", "Urban")) +
+  scale_fill_manual("Category", values = c("#1B9E77", "#D95F02"),
+                     labels = c("Rural", "Urban")) +
+  ylab("Daily Average Leq (20-1000 Hz)") +
+  theme_classic()
+
+dayavgl_2020 %>% 
+group_by(Visit, Category) %>% 
+  summarize(mean = mean(mean_leq),
+            se = plotrix::std.error(mean_leq)) %>% 
+  mutate(Visit = fct_relevel(Visit, "1", "2", "3", "4")) %>% 
+  ggplot(aes(x = Visit, y = mean, group = Category, color = Category, fill = Category)) +
+  geom_point(size = 2) +
+  geom_line() +
+  geom_errorbar(aes(ymin = mean - se, ymax = mean + se), width = 0.25) +
+  scale_y_continuous(limits = c(-70, -60), breaks = c(-70, -65, -60)) +
+  scale_color_manual("Category", values = c("#1B9E77", "#D95F02"),
+                     labels = c("Rural", "Urban")) +
+  scale_fill_manual("Category", values = c("#1B9E77", "#D95F02"),
+                     labels = c("Rural", "Urban")) +
+  ylab("Daily Average Leq (20-1000 Hz)") +
+  theme_classic()
+
+dayavgl_2020 %>% 
+    mutate(Visit = fct_relevel(Visit, "1", "2", "3", "4")) %>% 
+ggplot(aes(x = Visit, y = mean_leq)) +
+  geom_boxplot() +
+  scale_y_continuous(limits = c(-75, -50), breaks = c(-75, -70, -65, -60, -55, -50)) +
+  ylab("Daily Average Leq (20-1000 Hz)") +
+  theme_classic()
+```
+
+## Statistical Analysis
+
+```{r seasonal stats}
+#lmer - use this one (similar results)
+season.lmer <- lmer(mean_leq ~ Visit * Category + (1|Site), data = dayavgl_2020)
+summary(season.lmer)
+pairs(emmeans(season.lmer, "Visit"))
+r_squared(season.lmer)
+
+#robust lmer
+dayavgl_2020 <- dayavgl_2020 %>% 
+  mutate(Visit = fct_relevel(Visit, "3", "1", "2", "4"))
+dayavgl_2020 <- dayavgl_2020 %>% 
+  mutate(Visit2 = ifelse(Visit == "1" | Visit == "2", 1, 2))
+season.rlmer <- rlmer(mean_leq ~ Visit * Category + (1|Site), data = dayavgl_2020)
+summary(season.rlmer)
+coefs.robust <- data.frame(coef(summary(season.rlmer)))
+coefs.robust$P <- round(2*pt(abs(coefs.robust[,3]),
+                             summary(season.rlmer)$devcomp$dims[4],
+                             lower=FALSE), 10)
+coefs.robust
+r_squared(season.rlmer)
+```
+
+```{r harvest stats}
+# lmer
+harvest.lmer <- lmer(mean_leq ~ mean_harvest + (1 | Site), data = USDA_harvest)
+summary(harvest.lmer)
+r_squared(harvest.lmer)
+
+# robust - use this one (different results)
+harvest.rlmer <- rlmer(mean_leq ~ mean_harvest + (1|Site), data = USDA_harvest)
+summary(harvest.rlmer)
+coefs.robust <- data.frame(coef(summary(harvest.rlmer)))
+coefs.robust$P <- round(2*pt(abs(coefs.robust[,3]), summary(harvest.rlmer)$devcomp$dims[4], lower=FALSE), 10)
+coefs.robust
+r_squared(harvest.rlmer)
+```
+
+## Assumptions
+
+```{r seasonal assumptions}
+residual_plots(season.lmer, data = dayavgl_2020)
+plot(season.rlmer)
+
+test_harvest <- augment(harvest.lmer, data = USDA_harvest)
+resid_harvest <- ggplot(test_harvest, aes(x = .fitted, y = .resid)) + 
+  geom_point() + 
+  geom_smooth() +
+  geom_hline(yintercept = 0) +
+  xlab("Fitted Values") +
+  ylab("Standardized \nResiduals") +
+  theme_classic() +
+  theme(text = element_text(size = 14, color = "black")) +
+  theme(axis.text.x=element_text(color="black", size=14)) + 
+  theme(axis.text.y=element_text(color="black", size=14))
+
+y <- quantile(test_harvest$.resid, c(0.25, 0.75))
+x <- qnorm(c(0.25, 0.75))
+slope <- diff(y)/diff(x)
+int <- y[1L] - slope * x[1L]
+
+qq_harvest <- ggplot(test_harvest, aes(sample = .resid)) + 
+  stat_qq() + 
+  geom_abline(slope = slope, intercept = int) +
+  xlab("Theoretical Quantiles") +
+  ylab("Sample Quantiles") +
+  theme_classic() +
+  theme(text = element_text(size = 14, color = "black")) +
+  theme(axis.text.x=element_text(color="black", size=14)) + 
+  theme(axis.text.y=element_text(color="black", size=14))  
+
+ggarrange(resid_harvest, qq_harvest,  
+          labels = c("A", "B"),
+          ncol = 2, nrow = 1)
+```
+
+## Prediction Graphs
+
+```{r seasonal graph}
+predictions <- expand.grid(Visit = levels(factor(dayavgl$Visit)),
+                           Category = levels(factor(dayavgl_2020$Category)))
+predictions$response <- predict(season.lmer, newdata = predictions, se.fit = TRUE, re.form = NA, type = "response")
+
+#bigBoot_season <- bootMer(season.lmer, BootFunc, nsim = 1000)
+#saveRDS(bigBoot_season, file = "bootstrapping/bigBoot_season.Rds")
+bigBoot_season <- readRDS("bootstrapping/bigBoot_season.Rds")
+predSE <- t(apply(bigBoot_season$t, MARGIN = 2, FUN = sd))
+predictions$SE <- predSE[1, ]
+
+group2v3 <- data.frame(x = c(2, 3), 
+                   y = c(-51, -51))
+
+season_dayavgl_2020 <- dayavgl_2020 %>% 
+  ungroup() %>% 
+  dplyr::select(Site, Visit, Category, mean_leq) %>% 
+  group_by(Category, Visit) %>% 
+  summarise(mean = mean(mean_leq),
+            sd = sd(mean_leq))
+
+size = 16
+ggplot() +
+  geom_point(aes(x = Visit, y = mean, color = Category), data = season_dayavgl_2020, position = position_dodge(width = 0.25), size = 1) +
+  geom_errorbar(aes(x = Visit, ymax = mean + sd, ymin = mean - sd, color = Category), width = 0, data = season_dayavgl_2020, position = position_dodge(width = 0.25), linewidth = 0.4) +
+  geom_point(aes(x = Visit, y = mean_leq), color = "red", data = highlights) +
+  geom_line(aes(x = as.numeric(Visit), y = response, color = Category, group = Category), position = position_dodge(width = 0.25), data = predictions, linewidth = 0.5) +
+  geom_ribbon(aes(x = as.numeric(Visit), ymax = response + SE, ymin = response - SE, color = Category, fill = Category, group = Category), position = position_dodge(width = 0.25), alpha = 0.5, data = predictions) +
+  geom_line(data = group2v3, aes(x= x, y = y, group=1), inherit.aes = F) +
+  geom_label_repel(aes(x = Visit, y = mean_leq, label = mean_leq), color = "red", hjust = "right", data = highlights, size = 2) +
+  xlab("Visit") +
+  ylab("Daily average relative amplitude \n(Leq in dB re FS, 20-1000 Hz)") +
+  #ylab("Amplitude (dB)\nQuieter <-------------------> Louder") +
+  scale_color_manual("Category", values = c("#1B9E77", "#D95F02"),
+                     labels = c("Rural", "Urban")) +
+  scale_fill_manual("Category", values = c("#1B9E77", "#D95F02"),
+                     labels = c("Rural", "Urban")) +
+  scale_x_discrete(labels=c("1" = "Aug 3-\nAug 20\n1", "2" = "Aug 31-\nSept 21\n2",
+                              "3" = "Sept 22-\nOct 8\n3", "4" = "Oct 12-\nOct 23\n4")) +
+  scale_y_continuous(limits = c(-75, -50), breaks = c(-75, -70, -65, -60, -55, -50)) +
+  theme_classic() +
+  theme(text = element_text(size = size, color = "black", family = "sans"),
+        axis.text = element_text(size = size, color = "black", family = "sans"),
+        axis.title = element_text(size = size, color = "black", family = "sans"),
+        legend.text = element_text(size = size, color = "black", family = "sans"),
+        legend.position = "none",
+        panel.grid.major.y = element_line(colour = "black", linetype = "dashed", size = 0.1)
+        ) +
+   annotate("text", x = 2.5, y = -50.75, label = "*", size = 6, color = "black") 
+```
+
+```{r harvest plot}
+predictions <- data.frame(allEffects(harvest.rlmer, residuals = TRUE)[[1]])
+ggplot() +
+  geom_point(aes(x = mean_harvest, y = mean_leq), data = USDA_harvest, color = "#1B9E77") +
+  geom_line(aes(x = mean_harvest, y = fit), data = predictions, size = 1) +
+  geom_ribbon(aes(x = mean_harvest, ymax = fit + se, ymin = fit - se), data = predictions, color = "#1B9E77", fill = "#1B9E77", alpha = 0.5) +
+  xlab("Week end % of field crop harvested") +
+  ylab("Daily average relative amplitude \n(Leq in dB re FS, 20-1000 Hz)") +
+  scale_y_continuous(limits = c(-75, -55), breaks = c(-75, -70, -65, -60, -55)) +
+  theme_classic() +
+  theme(text = element_text(size = 10, color = "black", family = "sans"),
+        axis.text = element_text(size = 10, color = "black", family = "sans"),
+        axis.title = element_text(size = 10, color = "black", family = "sans"),
+        legend.text = element_text(size = 10, color = "black", family = "sans"),
+        legend.position = "none",
+        panel.grid.major.y = element_line(colour = "black", linetype = "dashed", size = 0.1)) 
+```
+
+# Hourly Analysis
+
+## Raw Plots
+
+```{r 24 hour}
+houravg <- houravgcatl %>% 
+  group_by(Category, Hour) %>% 
+  summarize(mean_leq = mean(meanleq),
+            se_leq = plotrix::std.error(meanleq))
+
+formatting_face <- ifelse(houravg$Hour == 8 | houravg$Hour == 9 | houravg$Hour == 15, "bold", "plain")
+formatting_size <- ifelse(houravg$Hour == 8 | houravg$Hour == 9 | houravg$Hour == 15, 12, 10)
+
+hourly_houravg <- houravgcatl %>% 
+  dplyr::select(Category, Hour, meanleq) %>% 
+  group_by(Hour, Category) %>% 
+  summarise(mean = mean(meanleq),
+            sd = sd(meanleq))
+
+ggplot() +
+  annotate("rect", xmin = -0.5, xmax = 7, ymin = -75, ymax = -42,
+           alpha = 0.5,fill = "darkgrey") +
+  annotate("rect", xmin = 19, xmax = 23.5, ymin = -75, ymax = -42,
+           alpha = 0.5,fill = "darkgrey") +
+  geom_point(aes(x = Hour, y = mean, color = Category), data = hourly_houravg, position = position_dodge(width = 0.25), size = 1) +
+  geom_errorbar(aes(x = Hour, ymax = mean + sd, ymin = mean - sd, color = Category), data = hourly_houravg, position = position_dodge(width = 0.25), linewidth = 0.5, width = 0) +
+  geom_vline(xintercept = 8, color = "#D95F02", linetype = "dashed", size = 0.5) +
+  geom_vline(xintercept = 15, color = "#D95F02", linetype = "dashed", size = 0.5) +
+  geom_vline(xintercept = 9, color = "#1B9E77", linetype = "dashed", size = 0.5) +
+  geom_vline(xintercept = 15.1, color = "#1B9E77", linetype = "dashed", size = 0.5) +
+  geom_line(aes(x = Hour, y = mean_leq, color = Category), data = houravg, linewidth = 0.5) +
+  geom_ribbon(aes(x = Hour, ymin = mean_leq - se_leq, ymax = mean_leq + se_leq, fill = Category), data = houravg, alpha = 0.5) +
+  xlab("Hour of day") +
+  ylab("Hourly average relative amplitude \n(Leq in dB re FS, 20-1000 Hz)") +
+  scale_color_manual("Category", values = c("#1B9E77", "#D95F02"),
+                     labels = c("Rural", "Urban")) +
+  scale_fill_manual("Category", values = c("#1B9E77", "#D95F02"),
+                     labels = c("Rural", "Urban")) +
+  scale_x_continuous(limits = c(-0.5, 23.5), breaks = seq(0, 23, 1), expand = c(0, 0)) +
+  scale_y_continuous(limits = c(-75, -42), breaks = c(-75, -70, -65, -60, -55, -50, -45), expand = c(0, 0)) +
+  theme_classic() +
+  theme(text = element_text(size = 10, color = "black", family = "sans"),
+        legend.position = "top",
+        axis.text = element_text(size = formatting_size, color = "black", family = "sans", face = formatting_face))
+
+ggplot() +
+  annotate("rect", xmin = -0.5, xmax = 7, ymin = -75, ymax = -55,
+           alpha = 0.5,fill = "darkgrey") +
+  annotate("rect", xmin = 19, xmax = 23.5, ymin = -75, ymax = -55,
+           alpha = 0.5,fill = "darkgrey") +
+  #geom_point(aes(x = Hour, y = mean, color = Category), data = hourly_houravg, position = position_dodge(width = 0.25), size = 1) +
+  #geom_errorbar(aes(x = Hour, ymax = mean + sd, ymin = mean - sd, color = Category), data = hourly_houravg, position = position_dodge(width = 0.25), linewidth = 0.5, width = 0) +
+  geom_line(aes(x = Hour, y = mean_leq, color = Category), data = houravg, linewidth = 0.5) +
+  geom_ribbon(aes(x = Hour, ymin = mean_leq - 1.96 * se_leq, ymax = mean_leq + 1.96 * se_leq, fill = Category), data = houravg, alpha = 0.5) +
+  xlab("Hour of day") +
+  #ylab("Hourly average relative amplitude \n(Leq in dB re FS, 20-1000 Hz)") +
+  ylab("Amplitude (dB)\nQuieter <-------------------> Louder") +
+  scale_color_manual("", values = c("#1B9E77", "#D95F02"),
+                     labels = c("Rural", "Urban")) +
+  scale_fill_manual("", values = c("#1B9E77", "#D95F02"),
+                     labels = c("Rural", "Urban")) +
+  scale_x_continuous(limits = c(-0.5, 23.5), breaks = seq(0, 23, 4), expand = c(0, 0)) +
+  scale_y_continuous(limits = c(-75, -55), breaks = c(-75, -70, -65, -60, -55), expand = c(0, 0)) +
+  theme_classic() +
+  theme(text = element_text(size = 24, color = "black", family = "sans"),
+        legend.position = "top",
+        axis.text = element_text(size = 24, color = "black", family = "sans"),
+        legend.text = element_text(size = 24, color = "black", family = "sans"))
+```
+
+```{r 24 hour by visit}
+houravgvisit <- houravgcatl %>% 
+  group_by(Category, Hour, Visit) %>% 
+  summarize(mean_leq = mean(meanleq),
+            se_leq = plotrix::std.error(meanleq))
+
+formatting_face <- ifelse(houravgvisit$Hour == 8 | 
+                            houravgvisit$Hour == 9 | 
+                            houravgvisit$Hour == 15, "bold", "plain")
+formatting_size <- ifelse(houravgvisit$Hour == 8 | 
+                            houravgvisit$Hour == 9 | 
+                            houravgvisit$Hour == 15, 12, 10)
+
+hourly_visit_houravg <- houravgcatl %>% 
+  dplyr::select(Category, Visit, Hour, meanleq) %>% 
+  group_by(Hour, Category, Visit) %>% 
+  summarise(mean = mean(meanleq),
+            sd = sd(meanleq))
+
+labs <- c("Visit 1: Aug 3-20",
+          "Visit 2: Aug 31-Sept 21",
+          "Visit 3: Sept 22-Oct 8",
+          "Visit 4: Oct 12-23")
+names(labs) <- c("1", "2", "3", "4")
+
+ggplot() +
+  annotate("rect", xmin = -0.5, xmax = 7, ymin = -75, ymax = -42,
+           alpha = 0.5,fill = "darkgrey") +
+  annotate("rect", xmin = 19, xmax = 23.5, ymin = -75, ymax = -42,
+           alpha = 0.5,fill = "darkgrey") +
+  geom_point(aes(x = Hour, y = mean, color = Category), data = hourly_visit_houravg, position = position_dodge(width = 0.25), size = 1) +
+  geom_errorbar(aes(x = Hour, ymax = mean + sd, ymin = mean - sd, color = Category), data = hourly_visit_houravg, position = position_dodge(width = 0.25), linewidth = 0.5, width = 0) +
+  geom_vline(xintercept = 8, color = "#D95F02", linetype = "dashed", size = 0.5) +
+  geom_vline(xintercept = 15, color = "#D95F02", linetype = "dashed", size = 0.5) +
+  geom_vline(xintercept = 9, color = "#1B9E77", linetype = "dashed", size = 0.5) +
+  geom_vline(xintercept = 15.1, color = "#1B9E77", linetype = "dashed", size = 0.5) +
+  geom_line(aes(x = Hour, y = mean_leq, group = Category, color = Category), data = houravgvisit) +
+  geom_ribbon(aes(x = Hour, ymin = mean_leq - se_leq, ymax = mean_leq + se_leq, fill = Category), data = houravgvisit, alpha = 0.5) +
+  xlab("Hour of day") +
+  ylab("Hourly average relative amplitude (Leq in dB re FS, 20-1000 Hz)") +
+  scale_color_manual("Category", values = c("#1B9E77", "#D95F02"),
+                     labels = c("Rural", "Urban")) +
+  scale_fill_manual("Category", values = c("#1B9E77", "#D95F02"),
+                     labels = c("Rural", "Urban")) +
+  scale_x_continuous(limits = c(-0.5, 23.5), breaks = seq(0, 23, 1), expand = c(0, 0)) +
+  scale_y_continuous(limits = c(-75, -42), breaks = c(-75, -70, -65, -60, -55, -50, -45), expand = c(0, 0)) +
+  theme_classic() +
+  theme(text = element_text(size = 10, color = "black", family = "sans"),
+        legend.position = "top",
+        axis.text = element_text(size = formatting_size, color = "black", family = "sans", face = formatting_face)) +
+  facet_wrap(~Visit, ncol = 1, labeller = labeller(Visit = labs))
+```
+
