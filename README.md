@@ -14,7 +14,7 @@ Access PDF: [View PDF](./manuscript.pdf)
 
 ## What:
 
-> > The use of vibratory information is widespread across arthropods, and disruption in this sensory channel from human-induced noise is likely. We quantified variation in vibratory noise across an urban-rural microhabitat and the adult season of the funnel-weaving spider (Agelenopsis pennsylvanica). Vibratory noise varied spatially in urban areas and seasonally in rural areas and was linked to traffic and harvesting, respectively. We found that A. pennsylvanica collected from urban and rural habitats had complex responses to using a variable vibratory microhabitat.
+> > The use of vibratory information is widespread across arthropods, and disruption in this sensory channel from human-induced noise is likely. We quantified variation in vibratory noise across an urban-rural microhabitat and the adult season of the funnel-weaving spider (*Agelenopsis pennsylvanica*). Vibratory noise varied spatially in urban areas and seasonally in rural areas and was linked to traffic and harvesting, respectively. We found that *A. pennsylvanica* collected from urban and rural habitats had complex responses to using a variable vibratory microhabitat.
 
 The code presented in this repository walks through the analysis of this data, including:
 
@@ -44,7 +44,7 @@ The code presented in this repository walks through the analysis of this data, i
 
 ## Why:
 
-> > Animals distribute themselves within habitats based on a variety of environmental conditions, including those impacted by urbanization. Suspected global declines in urban arthropod biodiversity have required that we examine how urban conditions affect the distribution of this ecologically important group. Traffic impacts and road presence likely introduce vibrations to the ground that could disrupt vibratory information acquisition, potentially leading urban spiders to adjust their location to minimize noise impacts. The use of vibratory information is widespread among many urban-dwelling arthropods, and future research is needed to determine if vibratory noise could play a role in the global decline of urban arthropod biodiversity.
+> > Vibratory noise is an understudied human disturbance. Like airborne acoustic noise, it has the potential to overlap spectrally, spatially, and temporally with animal communication and foraging signals/cues. This gap in research is concerning because the use of vibratory information is ubiquitous across ecologically critical arthropods. We stress the importance of understanding how vibratory noise (and any environmental disturbance) varies across the microhabitat and season of the study organism to identify potential overlaps. Our research showed that vibratory noise is as widespread and persistent as airborne acoustic noise, and we urge the study of its impact across vibrationally-orienting animals, particularly arthropods. Further research is vital to determine the role vibratory noise may play in the disappearance of arthropods and their essential ecosystem services from urban spaces.
 
 ## How:
 
